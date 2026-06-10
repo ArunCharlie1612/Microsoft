@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+body {
+  @apply bg-ink text-slate-200 antialiased;
+}
+
+.glass {
+  @apply bg-panel/70 backdrop-blur border border-white/5 rounded-xl;
+}
+
+.glow-breach {
+  box-shadow: 0 0 24px rgba(255, 59, 92, 0.35);
+}
+.glow-signal {
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.3);
+}

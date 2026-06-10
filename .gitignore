@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.pnp.*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+!.env.local.example
+*.pem
+*.key
+
+# Azure
+.azure/
+azd.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs / coverage
+*.log
+coverage/
+htmlcov/
+.coverage

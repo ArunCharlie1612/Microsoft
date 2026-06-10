@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: breachsim
+metadata:
+  template: breachsim@1.0.0
+services:
+  api:
+    project: ./backend
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      remoteBuild: true
+  web:
+    project: ./frontend
+    language: ts
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      remoteBuild: true
+      buildArgs:
+        - NEXT_PUBLIC_API_BASE=${API_URI}
+  # NOTE: the `functions` sandbox is not provisioned in the demo infra (execution is
+  # simulated in the API). Re-add a Function App resource to infra/ before enabling it.
+infra:
+  provider: bicep
+  path: ./infra
