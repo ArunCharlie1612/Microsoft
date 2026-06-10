@@ -21,6 +21,7 @@ jobs:
         working-directory: backend
         env:
           APP_ENV: local
+          BREACHSIM_DEMO_PACING_MS: "0"
         run: |
           pip install -r requirements.txt
           ruff check .
