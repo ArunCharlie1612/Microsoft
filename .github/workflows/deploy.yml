@@ -38,7 +38,10 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Only deploy on a manual run (workflow_dispatch). Configure the Azure OIDC
+    # secrets/vars (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+    # AZURE_ENV_NAME, AZURE_LOCATION) before triggering, or the login will fail.
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - name: Install azd
