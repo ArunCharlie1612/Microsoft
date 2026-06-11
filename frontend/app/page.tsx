@@ -8,6 +8,7 @@ import { UsagePanel } from "@/components/UsagePanel";
 import {
   AgentEvent,
   AttackGraph as Graph,
+  cancelRun,
   createRun,
   getFindings,
   getGraph,
@@ -16,7 +17,7 @@ import {
   toText,
 } from "@/lib/api";
 import { Play, ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const DEMO_SCOPE = {
   subscriptionId: "00000000-0000-0000-0000-000000000000",
@@ -34,6 +35,10 @@ export default function DashboardPage() {
   const [running, setRunning] = useState(false);
   const [usageKey, setUsageKey] = useState(0);
 
+  // Track the in-flight run so we can terminate it (e.g. on sign-out).
+  const activeRunId = useRef<string | null>(null);
+  const unsubscribe = useRef<(() => void) | null>(null);
+
   async function launch() {
     setEvents([]);
     setGraph({ nodes: [], edges: [] });
@@ -44,8 +49,9 @@ export default function DashboardPage() {
 
     await seedDemo();
     const run = await createRun("Live Demo — misconfigured blob", DEMO_SCOPE);
+    activeRunId.current = run.runId;
 
-    streamEvents(
+    unsubscribe.current = streamEvents(
       run.runId,
       (e) => {
         setEvents((prev) => [...prev, e]);
@@ -60,6 +66,8 @@ export default function DashboardPage() {
         setActive(null);
         setRunning(false);
         setProgress(1);
+        activeRunId.current = null;
+        unsubscribe.current = null;
         setFindings(await getFindings(run.runId));
         setGraph(await getGraph(run.runId));
         setUsageKey((k) => k + 1);
@@ -67,8 +75,25 @@ export default function DashboardPage() {
     );
   }
 
+  // Terminate any in-flight scan and reset the console when the user signs out.
+  function handleSignOut() {
+    unsubscribe.current?.();
+    unsubscribe.current = null;
+    if (activeRunId.current) {
+      cancelRun(activeRunId.current);
+      activeRunId.current = null;
+    }
+    setRunning(false);
+    setActive(null);
+    setProgress(0);
+    setEvents([]);
+    setFindings([]);
+    setGraph({ nodes: [], edges: [] });
+    setCompleted(new Set());
+  }
+
   return (
-    <AuthGate>
+    <AuthGate onSignOut={handleSignOut}>
       <div className="space-y-6">
         <section className="flex items-center justify-between">
           <div>

@@ -145,6 +145,19 @@ export async function getFindings(runId: string): Promise<any[]> {
   return res.json();
 }
 
+/** Cancel an in-flight run. Best-effort: never throws so sign-out is never blocked. */
+export async function cancelRun(runId: string): Promise<void> {
+  try {
+    await fetch(`${BASE}/v1/runs/${runId}/cancel`, {
+      method: "POST",
+      headers: authHeaders(),
+      keepalive: true,
+    });
+  } catch {
+    // ignore — the swarm stops accepting our stream the moment we sign out anyway
+  }
+}
+
 /** Subscribe to the live agent SSE stream. Returns an unsubscribe fn. */
 export function streamEvents(
   runId: string,
