@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.config import settings
 from app.core.security import Principal, require_role
@@ -12,7 +12,7 @@ from app.models.schemas import (
     TenantProfile,
     UsageSummary,
 )
-from app.services import billing
+from app.services import billing, stripe_billing
 from app.services.tenant_manager import tenant_manager
 
 router = APIRouter(prefix="/v1/tenants", tags=["tenants"])
@@ -62,3 +62,33 @@ async def usage(
     principal: Principal = Depends(require_role("breachsim.operator")),
 ) -> UsageSummary:
     return billing.usage_summary(principal.tenant_id)
+
+
+@router.post("/me/checkout")
+async def checkout(
+    principal: Principal = Depends(require_role("breachsim.operator")),
+) -> dict:
+    """Start a Stripe Checkout session to upgrade this tenant to the Pro plan."""
+    if not settings.billing_enabled:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Billing is not configured.")
+    tenant = tenant_manager.get(principal.tenant_id)
+    if not tenant:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    try:
+        url = await stripe_billing.create_checkout_session(tenant.id, tenant.email)
+    except stripe_billing.BillingNotConfiguredError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    return {"checkoutUrl": url}
+
+
+@router.post("/billing/webhook", include_in_schema=False)
+async def stripe_webhook(request: Request) -> dict:
+    """Stripe webhook receiver — verifies the signature and updates the tenant plan."""
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        return await stripe_billing.handle_webhook(payload, signature)
+    except stripe_billing.BillingNotConfiguredError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc

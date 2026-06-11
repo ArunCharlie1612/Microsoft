@@ -113,3 +113,57 @@ def test_usage_summary_reports_plan_limit():
     usage = client.get("/v1/tenants/me/usage", headers={"X-API-Key": api_key}).json()
     assert usage["plan"] == "free"
     assert usage["dailyRunLimit"] == settings.plan_free_daily_runs
+
+
+# ── Stripe billing ───────────────────────────────────────────────────────────────
+def test_checkout_503_when_billing_disabled():
+    resp = client.post("/v1/tenants/signup", json={"name": "No Billing Co"})
+    api_key = resp.json()["apiKey"]
+    r = client.post("/v1/tenants/me/checkout", headers={"X-API-Key": api_key})
+    assert r.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_set_plan_upgrades_and_resolves_by_customer():
+    from app.models.schemas import PlanTier
+
+    tm = TenantManager()
+    tenant, _ = await tm.create_tenant("Upgrade Co")
+    updated = await tm.set_plan(tenant.id, plan=PlanTier.PRO, stripe_customer_id="cus_123")
+    assert updated is not None
+    assert updated.plan == "pro"
+    assert tm.get_by_stripe_customer("cus_123") is tenant
+
+
+@pytest.mark.asyncio
+async def test_webhook_upgrades_tenant_on_checkout_completed(monkeypatch):
+    from app.models.schemas import PlanTier
+    from app.services import stripe_billing
+    from app.services.tenant_manager import tenant_manager as global_tm
+
+    # Create a real tenant in the global manager so the webhook can find it.
+    tenant, _ = await global_tm.create_tenant("Webhook Co")
+    monkeypatch.setattr(settings, "stripe_api_key", "sk_test_x")
+    monkeypatch.setattr(settings, "stripe_price_pro", "price_x")
+    monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_x")
+
+    # Stub Stripe signature verification to return a canned event.
+    class _FakeStripe:
+        class Webhook:
+            @staticmethod
+            def construct_event(payload, signature, secret):
+                return {
+                    "type": "checkout.session.completed",
+                    "data": {
+                        "object": {
+                            "metadata": {"tenant_id": tenant.id},
+                            "customer": "cus_abc",
+                            "subscription": "sub_abc",
+                        }
+                    },
+                }
+
+    monkeypatch.setattr(stripe_billing, "_stripe", lambda: _FakeStripe)
+    result = await stripe_billing.handle_webhook(b"{}", "sig")
+    assert result["handled"] == "checkout.session.completed"
+    assert global_tm.get(tenant.id).plan == PlanTier.PRO

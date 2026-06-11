@@ -91,6 +91,18 @@ class Settings(BaseSettings):
     plan_free_daily_runs: int = 5
     plan_pro_daily_runs: int = 200
 
+    # Stripe billing (optional). When unset, the upgrade flow is disabled and the
+    # product runs free on the FREE plan only.
+    stripe_api_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_pro: str = ""  # Stripe Price ID for the Pro plan subscription
+    billing_success_url: str = "http://localhost:3000/?billing=success"
+    billing_cancel_url: str = "http://localhost:3000/?billing=cancel"
+
+    @property
+    def billing_enabled(self) -> bool:
+        return bool(self.stripe_api_key and self.stripe_price_pro)
+
     # Auth — decoupled from app_env so the production identity flow can be enabled
     # independently of the OpenAI/Cosmos stub behaviour.
     breachsim_require_auth: bool = False

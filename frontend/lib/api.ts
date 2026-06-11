@@ -94,6 +94,19 @@ export async function getUsage(): Promise<UsageSummary> {
   return res.json();
 }
 
+/** Start a Stripe Checkout to upgrade to Pro. Returns the redirect URL, or null if
+ * billing is not configured on the server (503). */
+export async function createCheckout(): Promise<string | null> {
+  const res = await fetch(`${BASE}/v1/tenants/me/checkout`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (res.status === 503) return null; // billing not configured
+  if (!res.ok) throw new Error(`checkout failed: ${res.status}`);
+  const body = await res.json();
+  return body.checkoutUrl as string;
+}
+
 export async function createRun(
   name: string,
   scope: RunScope,

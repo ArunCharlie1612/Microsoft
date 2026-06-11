@@ -222,6 +222,8 @@ class Tenant(BaseModel):
     status: str = "active"
     api_key_hashes: list[str] = Field(default_factory=list, alias="apiKeyHashes")
     api_keys: list[ApiKeyInfo] = Field(default_factory=list, alias="apiKeys")
+    stripe_customer_id: str = Field("", alias="stripeCustomerId")
+    stripe_subscription_id: str = Field("", alias="stripeSubscriptionId")
     created_at: datetime = Field(default_factory=_now, alias="createdAt")
 
     model_config = {"populate_by_name": True}

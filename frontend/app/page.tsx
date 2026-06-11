@@ -4,6 +4,7 @@ import { AgentFeed } from "@/components/AgentFeed";
 import { AgentRoster } from "@/components/AgentRoster";
 import { AttackGraph } from "@/components/AttackGraph";
 import { AuthGate } from "@/components/AuthGate";
+import { UsagePanel } from "@/components/UsagePanel";
 import {
   AgentEvent,
   AttackGraph as Graph,
@@ -31,6 +32,7 @@ export default function DashboardPage() {
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState(0);
   const [running, setRunning] = useState(false);
+  const [usageKey, setUsageKey] = useState(0);
 
   async function launch() {
     setEvents([]);
@@ -60,6 +62,7 @@ export default function DashboardPage() {
         setProgress(1);
         setFindings(await getFindings(run.runId));
         setGraph(await getGraph(run.runId));
+        setUsageKey((k) => k + 1);
       }
     );
   }
@@ -94,6 +97,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-3">
             <AgentRoster active={active} completed={completed} />
+            <div className="mt-6">
+              <UsagePanel refreshKey={usageKey} />
+            </div>
           </div>
           <div className="col-span-5">
             <AttackGraph graph={graph} />

@@ -109,6 +109,35 @@ class TenantManager:
     def get(self, tenant_id: str) -> Tenant | None:
         return self._tenants.get(tenant_id)
 
+    def get_by_stripe_customer(self, customer_id: str) -> Tenant | None:
+        if not customer_id:
+            return None
+        for tenant in self._tenants.values():
+            if tenant.stripe_customer_id == customer_id:
+                return tenant
+        return None
+
+    async def set_plan(
+        self,
+        tenant_id: str,
+        plan: PlanTier,
+        *,
+        stripe_customer_id: str | None = None,
+        stripe_subscription_id: str | None = None,
+    ) -> Tenant | None:
+        """Update a tenant's plan (and optional Stripe references). Persists the change."""
+        tenant = self._tenants.get(tenant_id)
+        if not tenant:
+            return None
+        tenant.plan = plan
+        if stripe_customer_id is not None:
+            tenant.stripe_customer_id = stripe_customer_id
+        if stripe_subscription_id is not None:
+            tenant.stripe_subscription_id = stripe_subscription_id
+        await self._persist(tenant)
+        logger.info("Tenant %s plan set to %s.", tenant_id, plan)
+        return tenant
+
     def resolve_api_key(self, raw: str) -> Tenant | None:
         """Return the tenant owning ``raw`` (or None). Constant-time hash compare."""
         if not raw or not raw.startswith(_KEY_PREFIX):

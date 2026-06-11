@@ -26,6 +26,9 @@ semantic-kernel==1.11.0
 PyGithub==2.4.0
 PyJWT[crypto]==2.9.0
 
+# Billing (optional — lazy imported, only needed when Stripe is configured)
+stripe==10.10.0
+
 # Tooling
 ruff==0.6.9
 pytest==8.3.3
