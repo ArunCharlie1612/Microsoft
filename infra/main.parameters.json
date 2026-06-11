@@ -7,6 +7,8 @@
     "openAiLocation": { "value": "${AZURE_OPENAI_LOCATION=eastus2}" },
     "gptCapacity": { "value": 1 },
     "deployOpenAi": { "value": "${DEPLOY_OPENAI=false}" },
-    "searchSku": { "value": "${SEARCH_SKU=free}" }
+    "searchSku": { "value": "${SEARCH_SKU=free}" },
+    "githubRemediationRepo": { "value": "${GITHUB_REMEDIATION_REPO=}" },
+    "githubBaseBranch": { "value": "${GITHUB_BASE_BRANCH=main}" }
   }
 }

@@ -23,6 +23,12 @@ param deployOpenAi string = 'false'
 @description('Azure AI Search SKU. "free" (~$0, 1 per sub) for demos; "basic" for production.')
 param searchSku string = 'free'
 
+@description('GitHub repo (owner/name) the Remediation agent opens PRs against. Empty disables real PRs.')
+param githubRemediationRepo string = ''
+
+@description('Base branch for remediation PRs.')
+param githubBaseBranch string = 'main'
+
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var prefix = 'bsim'
 var tags = { 'azd-env-name': environmentName, app: 'breachsim' }
@@ -44,6 +50,8 @@ module platform 'modules/platform.bicep' = {
     openAiLocation: openAiLocation
     deployOpenAi: toLower(deployOpenAi) == 'true'
     searchSku: searchSku
+    githubRemediationRepo: githubRemediationRepo
+    githubBaseBranch: githubBaseBranch
     tags: tags
   }
 }

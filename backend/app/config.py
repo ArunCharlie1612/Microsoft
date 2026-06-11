@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     github_installation_id: str = ""
     github_private_key_path: str = ""
     github_remediation_repo: str = ""
+    github_token: str = ""
+    github_base_branch: str = "main"
 
     # Safety guardrails
     breachsim_allowed_subscriptions: str = ""

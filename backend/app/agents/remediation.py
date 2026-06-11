@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 from typing import Any
+
+import httpx
 
 from app.agents.base import AgentContext, BaseAgent
 from app.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+_GITHUB_API = "https://api.github.com"
 
 
 class RemediationAgent(BaseAgent):
@@ -22,13 +27,85 @@ class RemediationAgent(BaseAgent):
         '{"iac_type", "diff", "pr_title", "pr_body"}.'
     )
 
-    async def open_github_pr(self, title: str, body: str, diff: str) -> str | None:
-        """Open a remediation PR. Returns the PR URL, or None in demo mode."""
-        if not settings.github_remediation_repo or settings.is_local:
-            logger.info("GitHub not configured — simulating PR.")
-            return "https://github.com/org/target-repo/pull/42"
-        # Prod: use PyGithub App auth to create a branch, commit the diff, open the PR.
-        return "https://github.com/org/target-repo/pull/42"
+    async def open_github_pr(
+        self, run_id: str, title: str, body: str, diff: str
+    ) -> str | None:
+        """Open a real remediation PR on the configured repo.
+
+        Creates a branch, commits the remediation as a file, and opens a PR. Returns the
+        PR URL, or None if GitHub is not configured or the call fails (demo falls back
+        gracefully so a swarm run never breaks because of remediation delivery).
+        """
+        repo = settings.github_remediation_repo
+        token = settings.github_token
+        if not repo or not token:
+            logger.info("GitHub not configured — simulating PR (no real PR opened).")
+            return None
+
+        base = settings.github_base_branch
+        branch = f"breachsim/remediation-{run_id}"
+        path = f"remediations/{run_id}.md"
+        owner = repo.split("/", 1)[0]
+        file_md = (
+            f"# {title}\n\n{body}\n\n"
+            f"## Proposed Infrastructure-as-Code fix\n\n```diff\n{diff}\n```\n"
+        )
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        try:
+            async with httpx.AsyncClient(
+                base_url=_GITHUB_API, headers=headers, timeout=30.0
+            ) as client:
+                # 1) Resolve base branch SHA.
+                ref = await client.get(f"/repos/{repo}/git/ref/heads/{base}")
+                ref.raise_for_status()
+                base_sha = ref.json()["object"]["sha"]
+
+                # 2) Create the working branch (ignore 422 = already exists).
+                create_ref = await client.post(
+                    f"/repos/{repo}/git/refs",
+                    json={"ref": f"refs/heads/{branch}", "sha": base_sha},
+                )
+                if create_ref.status_code not in (201, 422):
+                    create_ref.raise_for_status()
+
+                # 3) Commit the remediation file (update if it already exists).
+                put_body: dict[str, Any] = {
+                    "message": title,
+                    "content": base64.b64encode(file_md.encode()).decode(),
+                    "branch": branch,
+                }
+                existing = await client.get(
+                    f"/repos/{repo}/contents/{path}", params={"ref": branch}
+                )
+                if existing.status_code == 200:
+                    put_body["sha"] = existing.json()["sha"]
+                commit = await client.put(f"/repos/{repo}/contents/{path}", json=put_body)
+                commit.raise_for_status()
+
+                # 4) Open the PR (reuse the existing one if it was already opened).
+                pr = await client.post(
+                    f"/repos/{repo}/pulls",
+                    json={"title": title, "head": branch, "base": base, "body": body},
+                )
+                if pr.status_code == 201:
+                    return pr.json()["html_url"]
+                if pr.status_code == 422:
+                    open_prs = await client.get(
+                        f"/repos/{repo}/pulls",
+                        params={"head": f"{owner}:{branch}", "state": "open"},
+                    )
+                    if open_prs.status_code == 200 and open_prs.json():
+                        return open_prs.json()[0]["html_url"]
+                pr.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("GitHub PR creation failed: %s", exc)
+            return None
+        return None
 
     async def run(self, ctx: AgentContext) -> dict[str, Any]:
         risk = ctx.blackboard.get("risk", {})
@@ -49,13 +126,20 @@ class RemediationAgent(BaseAgent):
             ),
         }
         fix = await self.reason(prompt, fallback=fallback)
-        pr_url = await self.open_github_pr(fix["pr_title"], fix["pr_body"], fix["diff"])
+        pr_url = await self.open_github_pr(
+            ctx.run_id, fix["pr_title"], fix["pr_body"], fix["diff"]
+        )
         result = {
             "iac_type": fix["iac_type"],
             "pr_url": pr_url,
-            "status": "open",
+            "status": "open" if pr_url else "simulated",
             "diff": fix["diff"],
         }
         ctx.blackboard["remediation"] = result
-        await self.emit(ctx, f"Remediation PR opened: {pr_url}", {"remediation": result})
+        summary = (
+            f"Remediation PR opened: {pr_url}"
+            if pr_url
+            else "Remediation fix generated (simulated PR — GitHub not configured)"
+        )
+        await self.emit(ctx, summary, {"remediation": result})
         return result

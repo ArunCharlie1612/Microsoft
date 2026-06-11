@@ -16,6 +16,12 @@ param deployOpenAi bool = false
 @description('Azure AI Search SKU. "free" is ~$0 (1 per subscription) for demos; "basic" for production.')
 param searchSku string = 'free'
 
+@description('GitHub repo (owner/name) the Remediation agent opens PRs against. Empty disables real PRs.')
+param githubRemediationRepo string = ''
+
+@description('Base branch for remediation PRs.')
+param githubBaseBranch string = 'main'
+
 // ── Log Analytics + App Insights (observability) ──────────────
 resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${prefix}-logs-${resourceToken}'
@@ -174,6 +180,13 @@ var openAiEnv = deployOpenAi ? [
   { name: 'AZURE_OPENAI_EMBED_DEPLOYMENT', value: 'text-embedding-3-large' }
 ] : []
 
+// GitHub remediation PR target (non-secret). The PAT itself is set out-of-band as a
+// Container App secret (GITHUB_TOKEN) so it never lands in source or template state.
+var githubEnv = empty(githubRemediationRepo) ? [] : [
+  { name: 'GITHUB_REMEDIATION_REPO', value: githubRemediationRepo }
+  { name: 'GITHUB_BASE_BRANCH', value: githubBaseBranch }
+]
+
 var apiEnv = concat([
   // APP_ENV=local bypasses Entra auth so the public demo UI works without an
   // app registration. Switch to 'prod' once Entra ID is wired (see go-live doc).
@@ -182,7 +195,7 @@ var apiEnv = concat([
   { name: 'CORS_ORIGINS', value: webUrl }
   // Cosmos persistence via managed identity (no key) — runs/findings/graph survive restarts.
   { name: 'COSMOS_ENDPOINT', value: cosmos.properties.documentEndpoint }
-], openAiEnv)
+], openAiEnv, githubEnv)
 
 module api 'containerapp.bicep' = {
   name: 'api-app'

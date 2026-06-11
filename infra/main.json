@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "16152394870859991825"
+      "templateHash": "9797031853003326241"
     }
   },
   "parameters": {
@@ -49,6 +49,20 @@
       "defaultValue": "free",
       "metadata": {
         "description": "Azure AI Search SKU. \"free\" (~$0, 1 per sub) for demos; \"basic\" for production."
+      }
+    },
+    "githubRemediationRepo": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "GitHub repo (owner/name) the Remediation agent opens PRs against. Empty disables real PRs."
+      }
+    },
+    "githubBaseBranch": {
+      "type": "string",
+      "defaultValue": "main",
+      "metadata": {
+        "description": "Base branch for remediation PRs."
       }
     }
   },
@@ -100,6 +114,12 @@
           "searchSku": {
             "value": "[parameters('searchSku')]"
           },
+          "githubRemediationRepo": {
+            "value": "[parameters('githubRemediationRepo')]"
+          },
+          "githubBaseBranch": {
+            "value": "[parameters('githubBaseBranch')]"
+          },
           "tags": {
             "value": "[variables('tags')]"
           }
@@ -111,7 +131,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "3670083676377784008"
+              "templateHash": "13248450112534648096"
             }
           },
           "parameters": {
@@ -150,6 +170,20 @@
               "metadata": {
                 "description": "Azure AI Search SKU. \"free\" is ~$0 (1 per subscription) for demos; \"basic\" for production."
               }
+            },
+            "githubRemediationRepo": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "GitHub repo (owner/name) the Remediation agent opens PRs against. Empty disables real PRs."
+              }
+            },
+            "githubBaseBranch": {
+              "type": "string",
+              "defaultValue": "main",
+              "metadata": {
+                "description": "Base branch for remediation PRs."
+              }
             }
           },
           "variables": {
@@ -175,6 +209,7 @@
                 "pk": "/runId"
               }
             ],
+            "githubEnv": "[if(empty(parameters('githubRemediationRepo')), createArray(), createArray(createObject('name', 'GITHUB_REMEDIATION_REPO', 'value', parameters('githubRemediationRepo')), createObject('name', 'GITHUB_BASE_BRANCH', 'value', parameters('githubBaseBranch'))))]",
             "acrPullRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
             "openAiUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]"
           },
@@ -487,7 +522,7 @@
                     "value": true
                   },
                   "env": {
-                    "value": "[concat(createArray(createObject('name', 'APP_ENV', 'value', 'local'), createObject('name', 'BREACHSIM_DEMO_PACING_MS', 'value', '600'), createObject('name', 'CORS_ORIGINS', 'value', format('https://{0}-web-{1}.{2}', parameters('prefix'), parameters('resourceToken'), reference(resourceId('Microsoft.App/managedEnvironments', format('{0}-aca-env-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-03-01').defaultDomain)), createObject('name', 'COSMOS_ENDPOINT', 'value', reference(resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-11-15').documentEndpoint)), if(parameters('deployOpenAi'), createArray(createObject('name', 'AZURE_OPENAI_ENDPOINT', 'value', reference(resourceId('Microsoft.CognitiveServices/accounts', format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-10-01').endpoint), createObject('name', 'AZURE_OPENAI_DEPLOYMENT', 'value', 'gpt-4o'), createObject('name', 'AZURE_OPENAI_EMBED_DEPLOYMENT', 'value', 'text-embedding-3-large')), createArray()))]"
+                    "value": "[concat(createArray(createObject('name', 'APP_ENV', 'value', 'local'), createObject('name', 'BREACHSIM_DEMO_PACING_MS', 'value', '600'), createObject('name', 'CORS_ORIGINS', 'value', format('https://{0}-web-{1}.{2}', parameters('prefix'), parameters('resourceToken'), reference(resourceId('Microsoft.App/managedEnvironments', format('{0}-aca-env-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-03-01').defaultDomain)), createObject('name', 'COSMOS_ENDPOINT', 'value', reference(resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-11-15').documentEndpoint)), if(parameters('deployOpenAi'), createArray(createObject('name', 'AZURE_OPENAI_ENDPOINT', 'value', reference(resourceId('Microsoft.CognitiveServices/accounts', format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-10-01').endpoint), createObject('name', 'AZURE_OPENAI_DEPLOYMENT', 'value', 'gpt-4o'), createObject('name', 'AZURE_OPENAI_EMBED_DEPLOYMENT', 'value', 'text-embedding-3-large')), createArray()), variables('githubEnv'))]"
                   }
                 },
                 "template": {
