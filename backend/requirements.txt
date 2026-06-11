@@ -15,7 +15,7 @@ azure-keyvault-secrets==4.8.0
 azure-storage-blob==12.23.1
 azure-mgmt-resourcegraph==8.0.0
 azure-monitor-opentelemetry==1.6.1
-opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-instrumentation-fastapi==0.47b0
 
 # AI / Agents
 openai==1.51.0
