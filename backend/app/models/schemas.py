@@ -195,3 +195,74 @@ class AgentEvent(BaseModel):
     summary: str = ""
     payload: dict[str, Any] = Field(default_factory=dict)
     ts: datetime = Field(default_factory=_now)
+
+
+# ─────────────────────────── Tenancy / onboarding / billing ───────────────────────────
+class PlanTier(StrEnum):
+    FREE = "free"
+    PRO = "pro"
+
+
+class ApiKeyInfo(BaseModel):
+    """Non-secret metadata about an issued API key (the raw key is shown only once)."""
+
+    prefix: str
+    created_at: datetime = Field(default_factory=_now, alias="createdAt")
+
+    model_config = {"populate_by_name": True}
+
+
+class Tenant(BaseModel):
+    """A customer workspace. Each run, finding, and usage record is scoped to a tenant."""
+
+    id: str
+    name: str
+    email: str = ""
+    plan: PlanTier = PlanTier.FREE
+    status: str = "active"
+    api_key_hashes: list[str] = Field(default_factory=list, alias="apiKeyHashes")
+    api_keys: list[ApiKeyInfo] = Field(default_factory=list, alias="apiKeys")
+    created_at: datetime = Field(default_factory=_now, alias="createdAt")
+
+    model_config = {"populate_by_name": True}
+
+
+class SignupRequest(BaseModel):
+    name: str
+    email: str = ""
+    plan: PlanTier = PlanTier.FREE
+
+
+class SignupResponse(BaseModel):
+    tenant_id: str = Field(..., alias="tenantId")
+    name: str
+    plan: PlanTier
+    api_key: str = Field(..., alias="apiKey")
+    # The raw key is returned exactly once; it is never persisted or shown again.
+    note: str = "Store this API key now — it will not be shown again."
+
+    model_config = {"populate_by_name": True}
+
+
+class TenantProfile(BaseModel):
+    tenant_id: str = Field(..., alias="tenantId")
+    name: str
+    email: str = ""
+    plan: PlanTier
+    status: str = "active"
+    api_keys: list[ApiKeyInfo] = Field(default_factory=list, alias="apiKeys")
+    created_at: datetime = Field(default_factory=_now, alias="createdAt")
+
+    model_config = {"populate_by_name": True}
+
+
+class UsageSummary(BaseModel):
+    tenant_id: str = Field(..., alias="tenantId")
+    plan: PlanTier
+    runs_total: int = Field(0, alias="runsTotal")
+    runs_today: int = Field(0, alias="runsToday")
+    daily_run_limit: int = Field(0, alias="dailyRunLimit")
+    tokens_used: int = Field(0, alias="tokensUsed")
+    estimated_cost_usd: float = Field(0.0, alias="estimatedCostUsd")
+
+    model_config = {"populate_by_name": True}

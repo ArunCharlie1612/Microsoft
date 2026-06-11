@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Query, status
 
 from app.config import settings
 from app.core.logging import get_logger
@@ -22,18 +22,40 @@ class Principal:
         return role in self.roles or "breachsim.admin" in self.roles
 
 
-async def get_principal(authorization: str | None = Header(default=None)) -> Principal:
-    """Validate the Entra bearer token and return the principal.
+async def get_principal(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    api_key_qs: str | None = Query(default=None, alias="apiKey"),
+) -> Principal:
+    """Resolve the authenticated caller.
 
-    When auth is disabled (local dev, or a demo without ``breachsim_require_auth``)
-    a synthetic admin principal is returned so the swarm runs without an identity
-    provider. When enabled, a valid Entra ID JWT is required.
+    Resolution order:
+      1. ``X-API-Key`` header or ``apiKey`` query param — the self-service tenant
+         credential (works on any plan, no IdP). The query param exists so browser
+         ``EventSource`` (SSE), which cannot set headers, can still authenticate.
+         Always honoured so per-tenant isolation works even in local mode.
+      2. If auth is disabled (local dev / open demo) — a synthetic admin principal.
+      3. Otherwise — a valid Entra ID JWT is required (enterprise SSO path).
     """
+    api_key = x_api_key or api_key_qs
+    if api_key:
+        # Lazy import avoids a circular import (services import security).
+        from app.services.tenant_manager import tenant_manager
+
+        tenant = tenant_manager.resolve_api_key(api_key)
+        if not tenant or tenant.status != "active":
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or inactive API key")
+        return Principal(
+            sub=f"apikey:{tenant.id}",
+            tenant_id=tenant.id,
+            roles=["breachsim.operator"],
+        )
+
     if not settings.auth_enabled:
         return Principal(sub="local-dev", tenant_id="local", roles=["breachsim.admin"])
 
     if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token or API key")
 
     token = authorization.split(" ", 1)[1]
     claims = await _validate_entra_jwt(token)

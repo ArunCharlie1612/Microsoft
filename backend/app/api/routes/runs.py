@@ -19,7 +19,9 @@ from app.core.security import (
     require_role,
 )
 from app.models.schemas import CreateRunRequest, RunDetail, RunSummary
+from app.services import billing
 from app.services.run_manager import run_manager
+from app.services.tenant_manager import tenant_manager
 
 logger = get_logger(__name__)
 
@@ -45,6 +47,13 @@ async def create_run(
     run_rate_limiter.check(principal.sub or "anonymous")
     enforce_consent(req.authorization_acknowledged, req.authorized_by)
     enforce_scope(req.scope.subscription_id, req.scope.sandbox_only)
+    # Enforce the tenant's plan quota (skip for the synthetic local/admin principal).
+    tenant = tenant_manager.get(principal.tenant_id)
+    if tenant and not billing.within_quota(tenant.id, tenant.plan):
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            f"Daily run quota reached for the '{tenant.plan}' plan. Upgrade or try tomorrow.",
+        )
     detail = run_manager.create(req, tenant_id=principal.tenant_id)
     # Record the authorization-to-test attestation for audit.
     await repository.save(

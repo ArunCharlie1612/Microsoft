@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     cosmos_container_threatgraph: str = "threat_graph"
     cosmos_container_audit: str = "audit_log"
     cosmos_container_runs: str = "runs"
+    cosmos_container_tenants: str = "tenants"
 
     # Event Grid
     eventgrid_topic_endpoint: str = ""
@@ -79,6 +80,16 @@ class Settings(BaseSettings):
     breachsim_require_consent: bool = True
     # Live read-only recon against the target subscription (Azure Resource Graph).
     breachsim_live_recon: bool = False
+    # Opt-in: run benign, read-only reachability checks to *confirm* exposures.
+    # Never exploits or accesses data — see app/core/validation_probe.py.
+    breachsim_active_validation: bool = False
+
+    # Multi-tenant onboarding / billing.
+    # Allow self-service signup (issues a tenant + API key). Disable for invite-only.
+    breachsim_public_signup: bool = True
+    # Per-plan daily run quotas (free vs paid).
+    plan_free_daily_runs: int = 5
+    plan_pro_daily_runs: int = 200
 
     # Auth — decoupled from app_env so the production identity flow can be enabled
     # independently of the OpenAI/Cosmos stub behaviour.

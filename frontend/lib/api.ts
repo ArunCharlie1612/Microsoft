@@ -1,5 +1,7 @@
 /** Typed API client + SSE helpers for the BreachSim orchestrator. */
 
+import { authHeaders, getApiKey } from "./auth";
+
 export interface RunScope {
   subscriptionId: string;
   resourceGroups: string[];
@@ -57,6 +59,41 @@ export function toText(value: unknown): string {
   return String(value);
 }
 
+export interface SignupResponse {
+  tenantId: string;
+  name: string;
+  plan: string;
+  apiKey: string;
+  note: string;
+}
+
+export interface UsageSummary {
+  tenantId: string;
+  plan: string;
+  runsTotal: number;
+  runsToday: number;
+  dailyRunLimit: number;
+  tokensUsed: number;
+  estimatedCostUsd: number;
+}
+
+/** Self-service onboarding: returns a tenant + API key (shown once). */
+export async function signup(name: string, email = ""): Promise<SignupResponse> {
+  const res = await fetch(`${BASE}/v1/tenants/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email }),
+  });
+  if (!res.ok) throw new Error(`signup failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getUsage(): Promise<UsageSummary> {
+  const res = await fetch(`${BASE}/v1/tenants/me/usage`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`usage failed: ${res.status}`);
+  return res.json();
+}
+
 export async function createRun(
   name: string,
   scope: RunScope,
@@ -64,7 +101,7 @@ export async function createRun(
 ): Promise<CreateRunResponse> {
   const res = await fetch(`${BASE}/v1/runs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({
       name,
       scope,
@@ -78,17 +115,20 @@ export async function createRun(
 }
 
 export async function seedDemo(): Promise<unknown> {
-  const res = await fetch(`${BASE}/v1/demo/seed`, { method: "POST" });
+  const res = await fetch(`${BASE}/v1/demo/seed`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
   return res.json();
 }
 
 export async function getGraph(runId: string): Promise<AttackGraph> {
-  const res = await fetch(`${BASE}/v1/runs/${runId}/graph`);
+  const res = await fetch(`${BASE}/v1/runs/${runId}/graph`, { headers: authHeaders() });
   return res.json();
 }
 
 export async function getFindings(runId: string): Promise<any[]> {
-  const res = await fetch(`${BASE}/v1/runs/${runId}/findings`);
+  const res = await fetch(`${BASE}/v1/runs/${runId}/findings`, { headers: authHeaders() });
   return res.json();
 }
 
@@ -98,7 +138,10 @@ export function streamEvents(
   onEvent: (e: AgentEvent) => void,
   onDone: () => void
 ): () => void {
-  const es = new EventSource(`${BASE}/v1/runs/${runId}/events`);
+  // EventSource cannot set headers; pass the API key as a query param when present.
+  const key = getApiKey();
+  const qs = key ? `?apiKey=${encodeURIComponent(key)}` : "";
+  const es = new EventSource(`${BASE}/v1/runs/${runId}/events${qs}`);
   es.addEventListener("agent", (ev) => onEvent(JSON.parse((ev as MessageEvent).data)));
   es.addEventListener("done", () => {
     onDone();
