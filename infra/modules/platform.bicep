@@ -170,7 +170,6 @@ module api 'containerapp.bicep' = {
     location: location
     tags: union(tags, { 'azd-service-name': 'api' })
     environmentId: acaEnv.id
-    acrLoginServer: acr.properties.loginServer
     targetPort: 8000
     external: true
     env: [
@@ -190,7 +189,6 @@ module web 'containerapp.bicep' = {
     location: location
     tags: union(tags, { 'azd-service-name': 'web' })
     environmentId: acaEnv.id
-    acrLoginServer: acr.properties.loginServer
     targetPort: 3000
     external: true
     env: [

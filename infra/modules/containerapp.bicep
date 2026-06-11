@@ -3,7 +3,6 @@ param name string
 param location string
 param tags object
 param environmentId string
-param acrLoginServer string
 param targetPort int
 param external bool = true
 
@@ -24,7 +23,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
         allowInsecure: false
       }
-      registries: [{ server: acrLoginServer, identity: 'system' }]
+      // No ACR registry at provision time: the placeholder image is public (MCR), and
+      // azd configures the ACR registry + system-identity pull during `azd deploy`.
+      // Declaring an ACR registry here would fail because the system identity has no
+      // AcrPull yet at creation (chicken-and-egg → revision provisioning times out).
     }
     template: {
       containers: [
