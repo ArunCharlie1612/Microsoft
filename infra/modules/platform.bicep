@@ -7,6 +7,9 @@ param resourceToken string
 param gptCapacity int
 param tags object
 
+@description('Region for the Azure OpenAI account (separate from primary region to satisfy gpt-4o quota).')
+param openAiLocation string = location
+
 @description('Deploy Azure OpenAI. Set false to skip when OpenAI access is not yet approved; the app then runs in stub mode.')
 param deployOpenAi bool = false
 
@@ -47,7 +50,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
 // The backend falls back to deterministic stub mode without it.
 resource openAi 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deployOpenAi) {
   name: '${prefix}-aoai-${resourceToken}'
-  location: location
+  location: openAiLocation
   tags: tags
   kind: 'OpenAI'
   sku: { name: 'S0' }
@@ -57,9 +60,9 @@ resource openAi 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deployOp
 resource gpt4o 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (deployOpenAi) {
   parent: openAi
   name: 'gpt-4o'
-  sku: { name: 'GlobalStandard', capacity: gptCapacity }
+  sku: { name: 'Standard', capacity: gptCapacity }
   properties: {
-    model: { format: 'OpenAI', name: 'gpt-4o', version: '2024-08-06' }
+    model: { format: 'OpenAI', name: 'gpt-4o', version: '2024-11-20' }
   }
 }
 
@@ -111,6 +114,7 @@ var containers = [
   { name: 'agent_events', pk: '/run_id' }
   { name: 'threat_graph', pk: '/run_id' }
   { name: 'audit_log', pk: '/run_id' }
+  { name: 'runs', pk: '/runId' }
 ]
 
 resource cosmosContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = [
@@ -163,6 +167,23 @@ resource acaEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 var apiUrl = 'https://${prefix}-api-${resourceToken}.${acaEnv.properties.defaultDomain}'
 var webUrl = 'https://${prefix}-web-${resourceToken}.${acaEnv.properties.defaultDomain}'
 
+// Azure OpenAI env (managed-identity auth, no key) — only when OpenAI is deployed.
+var openAiEnv = deployOpenAi ? [
+  { name: 'AZURE_OPENAI_ENDPOINT', value: openAi.properties.endpoint }
+  { name: 'AZURE_OPENAI_DEPLOYMENT', value: 'gpt-4o' }
+  { name: 'AZURE_OPENAI_EMBED_DEPLOYMENT', value: 'text-embedding-3-large' }
+] : []
+
+var apiEnv = concat([
+  // APP_ENV=local bypasses Entra auth so the public demo UI works without an
+  // app registration. Switch to 'prod' once Entra ID is wired (see go-live doc).
+  { name: 'APP_ENV', value: 'local' }
+  { name: 'BREACHSIM_DEMO_PACING_MS', value: '600' }
+  { name: 'CORS_ORIGINS', value: webUrl }
+  // Cosmos persistence via managed identity (no key) — runs/findings/graph survive restarts.
+  { name: 'COSMOS_ENDPOINT', value: cosmos.properties.documentEndpoint }
+], openAiEnv)
+
 module api 'containerapp.bicep' = {
   name: 'api-app'
   params: {
@@ -172,13 +193,7 @@ module api 'containerapp.bicep' = {
     environmentId: acaEnv.id
     targetPort: 8000
     external: true
-    env: [
-      // APP_ENV=local bypasses Entra auth so the public demo UI works without an
-      // app registration. Switch to 'prod' once Entra ID is wired (see go-live doc).
-      { name: 'APP_ENV', value: 'local' }
-      { name: 'BREACHSIM_DEMO_PACING_MS', value: '600' }
-      { name: 'CORS_ORIGINS', value: webUrl }
-    ]
+    env: apiEnv
   }
 }
 
@@ -219,6 +234,34 @@ resource webAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     roleDefinitionId: acrPullRoleId
     principalId: web.outputs.identityPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Cosmos DB data-plane access (Built-in Data Contributor) for the API identity so it
+// can read/write documents using its managed identity (no account key needed).
+resource cosmosDataContributor 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
+  parent: cosmos
+  name: guid(cosmos.id, 'api', 'data-contributor')
+  properties: {
+    roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
+    principalId: api.outputs.identityPrincipalId
+    scope: cosmos.id
+  }
+}
+
+// Azure OpenAI data-plane access (Cognitive Services OpenAI User) for the API identity.
+var openAiUserRoleId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+)
+
+resource apiOpenAiUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOpenAi) {
+  name: guid(openAi.id, 'api', openAiUserRoleId)
+  scope: openAi
+  properties: {
+    roleDefinitionId: openAiUserRoleId
+    principalId: api.outputs.identityPrincipalId
     principalType: 'ServicePrincipal'
   }
 }

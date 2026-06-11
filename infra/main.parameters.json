@@ -4,7 +4,8 @@
   "parameters": {
     "environmentName": { "value": "${AZURE_ENV_NAME}" },
     "location": { "value": "${AZURE_LOCATION=eastus2}" },
-    "gptCapacity": { "value": 30 },
+    "openAiLocation": { "value": "${AZURE_OPENAI_LOCATION=eastus2}" },
+    "gptCapacity": { "value": 1 },
     "deployOpenAi": { "value": "${DEPLOY_OPENAI=false}" },
     "searchSku": { "value": "${SEARCH_SKU=free}" }
   }

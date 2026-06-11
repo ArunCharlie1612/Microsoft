@@ -7,6 +7,8 @@ import uuid
 from datetime import UTC, datetime
 
 from app.agents.orchestrator import orchestrator
+from app.config import settings
+from app.core.cosmos import repository
 from app.core.logging import get_logger
 from app.models.schemas import (
     AgentState,
@@ -37,6 +39,35 @@ class RunManager:
     def __init__(self) -> None:
         self._runs: dict[str, RunDetail] = {}
         self._tasks: dict[str, asyncio.Task] = {}
+        self._bg: set[asyncio.Task] = set()
+
+    async def load(self) -> None:
+        """Hydrate the in-memory cache from Cosmos so runs survive restarts."""
+        try:
+            docs = await repository.list_all(settings.cosmos_container_runs)
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not load persisted runs (continuing empty).", exc_info=True)
+            return
+        for doc in docs:
+            try:
+                detail = RunDetail.model_validate(doc)
+            except Exception:  # noqa: BLE001
+                continue
+            # A run still marked RUNNING means the process died mid-run; mark it failed.
+            if detail.status in (RunStatus.RUNNING, RunStatus.QUEUED):
+                detail.status = RunStatus.FAILED
+            self._runs[detail.run_id] = detail
+        if self._runs:
+            logger.info("Loaded %d persisted run(s) from Cosmos.", len(self._runs))
+
+    async def _persist(self, detail: RunDetail) -> None:
+        """Write-through persist a run's current state to Cosmos (best-effort)."""
+        try:
+            doc = detail.model_dump(mode="json", by_alias=True)
+            doc["id"] = detail.run_id
+            await repository.save(settings.cosmos_container_runs, doc)
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to persist run %s.", detail.run_id, exc_info=True)
 
     def create(self, req: CreateRunRequest) -> RunDetail:
         run_id = f"run_{uuid.uuid4().hex[:10]}"
@@ -49,6 +80,9 @@ class RunManager:
         )
         self._runs[run_id] = detail
         scope = req.scope.model_dump(by_alias=False)
+        persist_task = asyncio.create_task(self._persist(detail))
+        self._bg.add(persist_task)
+        persist_task.add_done_callback(self._bg.discard)
         self._tasks[run_id] = asyncio.create_task(self._execute(run_id, scope))
         return detail
 
@@ -56,6 +90,7 @@ class RunManager:
         detail = self._runs[run_id]
         detail.status = RunStatus.RUNNING
         detail.started_at = datetime.now(UTC)
+        await self._persist(detail)
         try:
             result = await orchestrator.run(run_id, scope)
             detail.status = RunStatus.COMPLETED
@@ -72,6 +107,7 @@ class RunManager:
             detail.status = RunStatus.FAILED
         finally:
             detail.completed_at = datetime.now(UTC)
+            await self._persist(detail)
 
     def get(self, run_id: str) -> RunDetail | None:
         return self._runs.get(run_id)
@@ -84,6 +120,7 @@ class RunManager:
         if task and not task.done():
             task.cancel()
             self._runs[run_id].status = RunStatus.CANCELLED
+            await self._persist(self._runs[run_id])
             return True
         return False
 

@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     cosmos_container_agents: str = "agent_events"
     cosmos_container_threatgraph: str = "threat_graph"
     cosmos_container_audit: str = "audit_log"
+    cosmos_container_runs: str = "runs"
 
     # Event Grid
     eventgrid_topic_endpoint: str = ""

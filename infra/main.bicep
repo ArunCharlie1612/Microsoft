@@ -11,6 +11,9 @@ param environmentName string
 @description('Primary Azure region')
 param location string = 'eastus2'
 
+@description('Region for the Azure OpenAI account. Defaults to a region with gpt-4o Standard quota.')
+param openAiLocation string = 'eastus2'
+
 @description('GPT-4o model deployment capacity (TPM in thousands)')
 param gptCapacity int = 30
 
@@ -38,6 +41,7 @@ module platform 'modules/platform.bicep' = {
     prefix: prefix
     resourceToken: resourceToken
     gptCapacity: gptCapacity
+    openAiLocation: openAiLocation
     deployOpenAi: toLower(deployOpenAi) == 'true'
     searchSku: searchSku
     tags: tags

@@ -12,6 +12,7 @@ from app.api.routes import demo, findings, health, runs
 from app.config import settings
 from app.core.cosmos import repository
 from app.core.logging import configure_logging, get_logger
+from app.services.run_manager import run_manager
 
 configure_logging()
 logger = get_logger(__name__)
@@ -21,6 +22,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("BreachSim orchestrator starting", extra={"trace_id": "boot"})
     await repository.connect()
+    await run_manager.load()
     yield
     await repository.close()
     logger.info("BreachSim orchestrator stopped")

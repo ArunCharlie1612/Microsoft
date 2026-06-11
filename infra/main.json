@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "6920628611711030068"
+      "templateHash": "16152394870859991825"
     }
   },
   "parameters": {
@@ -21,6 +21,13 @@
       "defaultValue": "eastus2",
       "metadata": {
         "description": "Primary Azure region"
+      }
+    },
+    "openAiLocation": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "Region for the Azure OpenAI account. Defaults to a region with gpt-4o Standard quota."
       }
     },
     "gptCapacity": {
@@ -84,6 +91,9 @@
           "gptCapacity": {
             "value": "[parameters('gptCapacity')]"
           },
+          "openAiLocation": {
+            "value": "[parameters('openAiLocation')]"
+          },
           "deployOpenAi": {
             "value": "[equals(toLower(parameters('deployOpenAi')), 'true')]"
           },
@@ -101,7 +111,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "3815794592876792940"
+              "templateHash": "3670083676377784008"
             }
           },
           "parameters": {
@@ -119,6 +129,13 @@
             },
             "tags": {
               "type": "object"
+            },
+            "openAiLocation": {
+              "type": "string",
+              "defaultValue": "[parameters('location')]",
+              "metadata": {
+                "description": "Region for the Azure OpenAI account (separate from primary region to satisfy gpt-4o quota)."
+              }
             },
             "deployOpenAi": {
               "type": "bool",
@@ -152,9 +169,14 @@
               {
                 "name": "audit_log",
                 "pk": "/run_id"
+              },
+              {
+                "name": "runs",
+                "pk": "/runId"
               }
             ],
-            "acrPullRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]"
+            "acrPullRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
+            "openAiUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]"
           },
           "resources": [
             {
@@ -206,7 +228,7 @@
               "type": "Microsoft.CognitiveServices/accounts",
               "apiVersion": "2024-10-01",
               "name": "[format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken'))]",
-              "location": "[parameters('location')]",
+              "location": "[parameters('openAiLocation')]",
               "tags": "[parameters('tags')]",
               "kind": "OpenAI",
               "sku": {
@@ -223,14 +245,14 @@
               "apiVersion": "2024-10-01",
               "name": "[format('{0}/{1}', format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken')), 'gpt-4o')]",
               "sku": {
-                "name": "GlobalStandard",
+                "name": "Standard",
                 "capacity": "[parameters('gptCapacity')]"
               },
               "properties": {
                 "model": {
                   "format": "OpenAI",
                   "name": "gpt-4o",
-                  "version": "2024-08-06"
+                  "version": "2024-11-20"
                 }
               },
               "dependsOn": [
@@ -407,6 +429,36 @@
               ]
             },
             {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+              "apiVersion": "2024-11-15",
+              "name": "[format('{0}/{1}', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken')), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken'))), 'api', 'data-contributor'))]",
+              "properties": {
+                "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002', resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken'))))]",
+                "principalId": "[reference(resourceId('Microsoft.Resources/deployments', 'api-app'), '2025-04-01').outputs.identityPrincipalId.value]",
+                "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken')))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'api-app')]",
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployOpenAi')]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken')))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken'))), 'api', variables('openAiUserRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('openAiUserRoleId')]",
+                "principalId": "[reference(resourceId('Microsoft.Resources/deployments', 'api-app'), '2025-04-01').outputs.identityPrincipalId.value]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'api-app')]",
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken')))]"
+              ]
+            },
+            {
               "type": "Microsoft.Resources/deployments",
               "apiVersion": "2025-04-01",
               "name": "api-app",
@@ -435,20 +487,7 @@
                     "value": true
                   },
                   "env": {
-                    "value": [
-                      {
-                        "name": "APP_ENV",
-                        "value": "local"
-                      },
-                      {
-                        "name": "BREACHSIM_DEMO_PACING_MS",
-                        "value": "600"
-                      },
-                      {
-                        "name": "CORS_ORIGINS",
-                        "value": "[format('https://{0}-web-{1}.{2}', parameters('prefix'), parameters('resourceToken'), reference(resourceId('Microsoft.App/managedEnvironments', format('{0}-aca-env-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-03-01').defaultDomain)]"
-                      }
-                    ]
+                    "value": "[concat(createArray(createObject('name', 'APP_ENV', 'value', 'local'), createObject('name', 'BREACHSIM_DEMO_PACING_MS', 'value', '600'), createObject('name', 'CORS_ORIGINS', 'value', format('https://{0}-web-{1}.{2}', parameters('prefix'), parameters('resourceToken'), reference(resourceId('Microsoft.App/managedEnvironments', format('{0}-aca-env-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-03-01').defaultDomain)), createObject('name', 'COSMOS_ENDPOINT', 'value', reference(resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-11-15').documentEndpoint)), if(parameters('deployOpenAi'), createArray(createObject('name', 'AZURE_OPENAI_ENDPOINT', 'value', reference(resourceId('Microsoft.CognitiveServices/accounts', format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken'))), '2024-10-01').endpoint), createObject('name', 'AZURE_OPENAI_DEPLOYMENT', 'value', 'gpt-4o'), createObject('name', 'AZURE_OPENAI_EMBED_DEPLOYMENT', 'value', 'text-embedding-3-large')), createArray()))]"
                   }
                 },
                 "template": {
@@ -542,7 +581,9 @@
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.App/managedEnvironments', format('{0}-aca-env-{1}', parameters('prefix'), parameters('resourceToken')))]"
+                "[resourceId('Microsoft.App/managedEnvironments', format('{0}-aca-env-{1}', parameters('prefix'), parameters('resourceToken')))]",
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-{1}', parameters('prefix'), parameters('resourceToken')))]",
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('{0}-aoai-{1}', parameters('prefix'), parameters('resourceToken')))]"
               ]
             },
             {

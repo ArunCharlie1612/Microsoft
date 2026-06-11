@@ -63,6 +63,7 @@ class CosmosRepository:
             settings.cosmos_container_agents,
             settings.cosmos_container_threatgraph,
             settings.cosmos_container_audit,
+            settings.cosmos_container_runs,
         ):
             self._containers[name] = db.get_container_client(name)
         logger.info("Connected to Cosmos DB.")
@@ -87,6 +88,16 @@ class CosmosRepository:
         params = [{"name": "@run_id", "value": run_id}]
         items: list[dict[str, Any]] = []
         async for item in c.query_items(query=query, parameters=params):
+            items.append(item)
+        return items
+
+    async def list_all(self, container: str) -> list[dict[str, Any]]:
+        """Return every document in a container (cross-partition)."""
+        c = self.container(container)
+        if isinstance(c, _InMemoryContainer):
+            return list(c._items.values())
+        items: list[dict[str, Any]] = []
+        async for item in c.query_items(query="SELECT * FROM c"):
             items.append(item)
         return items
 
