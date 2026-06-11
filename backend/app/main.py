@@ -12,9 +12,11 @@ from app.api.routes import demo, findings, health, runs
 from app.config import settings
 from app.core.cosmos import repository
 from app.core.logging import configure_logging, get_logger
+from app.core.telemetry import configure_telemetry
 from app.services.run_manager import run_manager
 
 configure_logging()
+configure_telemetry()
 logger = get_logger(__name__)
 
 
@@ -47,6 +49,10 @@ app.include_router(health.router)
 app.include_router(runs.router)
 app.include_router(findings.router)
 app.include_router(demo.router)
+
+from app.core.telemetry import instrument_app  # noqa: E402
+
+instrument_app(app)
 
 
 @app.get("/")

@@ -7,6 +7,7 @@ from typing import Any
 from app.agents.base import AgentContext, BaseAgent
 from app.config import settings
 from app.core.cosmos import repository
+from app.core.scoring import map_compliance
 
 
 class ComplianceAgent(BaseAgent):
@@ -14,48 +15,24 @@ class ComplianceAgent(BaseAgent):
     role = "Generates NIST/SOC2 evidence"
     completion_event = "breachsim.compliance.generated"
     system_prompt = (
-        "You are the Compliance Agent. Map each finding and its remediation to relevant "
-        "NIST 800-53, SOC 2, and ISO 27001 controls. Produce audit-ready evidence. Output strict "
-        'JSON: {"records": [{"framework", "control_id", "rationale"}]}.'
+        "You are the Compliance Agent. Control mappings are derived deterministically from the "
+        "validated techniques via an auditable crosswalk (no model guessing)."
     )
 
     async def run(self, ctx: AgentContext) -> dict[str, Any]:
-        risk = ctx.blackboard.get("risk", {})
-        plan = ctx.blackboard.get("plan", {})
-        prompt = f"Finding risk: {risk}\nAttack chain: {plan}\nMap to controls."
-        fallback = {
-            "records": [
-                {
-                    "framework": "NIST-800-53",
-                    "control_id": "AC-3",
-                    "rationale": "Access enforcement failure on public blob.",
-                },
-                {
-                    "framework": "NIST-800-53",
-                    "control_id": "SC-7",
-                    "rationale": "Boundary protection bypass via anonymous access.",
-                },
-                {
-                    "framework": "SOC2",
-                    "control_id": "CC6.1",
-                    "rationale": "Logical access controls not enforced.",
-                },
-                {
-                    "framework": "ISO-27001",
-                    "control_id": "A.9.4.1",
-                    "rationale": "Information access restriction violated.",
-                },
-            ]
-        }
-        out = await self.reason(prompt, fallback=fallback)
-        for i, rec in enumerate(out["records"]):
+        validations = ctx.blackboard.get("validations", [])
+        techniques = [
+            v.get("technique") for v in validations if v.get("validated") and v.get("technique")
+        ]
+        # Deterministic, auditable technique → control crosswalk.
+        records = map_compliance(techniques)
+        out = {"records": records}
+        for i, rec in enumerate(records):
             await repository.save(
                 settings.cosmos_container_findings,
                 {"id": f"{ctx.run_id}_comp_{i}", "run_id": ctx.run_id, "type": "compliance", **rec},
             )
-        ctx.blackboard["compliance"] = out["records"]
-        frameworks = sorted({r["framework"] for r in out["records"]})
-        await self.emit(
-            ctx, f"Evidence across {', '.join(frameworks)}", {"records": out["records"]}
-        )
+        ctx.blackboard["compliance"] = records
+        frameworks = sorted({r["framework"] for r in records})
+        await self.emit(ctx, f"Evidence across {', '.join(frameworks)}", {"records": records})
         return out

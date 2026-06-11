@@ -25,10 +25,11 @@ class Principal:
 async def get_principal(authorization: str | None = Header(default=None)) -> Principal:
     """Validate the Entra bearer token and return the principal.
 
-    In local mode, auth is bypassed with a synthetic admin principal so the demo
-    runs without an identity provider.
+    When auth is disabled (local dev, or a demo without ``breachsim_require_auth``)
+    a synthetic admin principal is returned so the swarm runs without an identity
+    provider. When enabled, a valid Entra ID JWT is required.
     """
-    if settings.is_local:
+    if not settings.auth_enabled:
         return Principal(sub="local-dev", tenant_id="local", roles=["breachsim.admin"])
 
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -84,4 +85,21 @@ def enforce_scope(subscription_id: str, sandbox_only: bool) -> None:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Subscription is not in the consented allow-list.",
+        )
+
+
+def enforce_consent(acknowledged: bool, authorized_by: str) -> None:
+    """Require an explicit authorization-to-test attestation on each run.
+
+    Simulating attacks against an environment requires documented permission. When
+    ``breachsim_require_consent`` is set, the caller must attest authorization and name
+    the authorizing party — both are recorded in the audit log by the caller.
+    """
+    if not settings.breachsim_require_consent:
+        return
+    if not acknowledged or not authorized_by.strip():
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Authorization-to-test required: set authorizationAcknowledged=true and "
+            "authorizedBy to the name of the approving owner.",
         )

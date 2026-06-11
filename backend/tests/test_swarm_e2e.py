@@ -5,7 +5,14 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.config import settings
+
+# Demo pacing inserts inter-phase sleeps for a watchable live feed; disable it under
+# the test client (whose event loop only advances during requests) so the swarm
+# completes promptly.
+settings.breachsim_demo_pacing_ms = 0
+
+from app.main import app  # noqa: E402
 
 client = TestClient(app)
 
@@ -24,6 +31,8 @@ def test_create_and_complete_run():
             "resourceGroups": ["rg-breachsim-sandbox"],
             "sandboxOnly": True,
         },
+        "authorizationAcknowledged": True,
+        "authorizedBy": "test-suite",
     }
     r = client.post("/v1/runs", json=payload)
     assert r.status_code == 202
@@ -31,7 +40,7 @@ def test_create_and_complete_run():
 
     # Poll until the background swarm completes.
     async def _wait():
-        for _ in range(50):
+        for _ in range(100):
             detail = client.get(f"/v1/runs/{run_id}").json()
             if detail["status"] in ("completed", "failed"):
                 return detail

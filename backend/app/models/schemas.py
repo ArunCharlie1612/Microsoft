@@ -70,6 +70,12 @@ class CreateRunRequest(BaseModel):
     name: str
     scope: RunScope
     options: RunOptions = Field(default_factory=RunOptions)
+    # Authorization-to-test: the caller must explicitly attest they are permitted to
+    # assess the target scope. Enforced when ``breachsim_require_consent`` is set.
+    authorization_acknowledged: bool = Field(False, alias="authorizationAcknowledged")
+    authorized_by: str = Field("", alias="authorizedBy")
+
+    model_config = {"populate_by_name": True}
 
 
 class AgentState(BaseModel):
@@ -83,6 +89,7 @@ class RunStats(BaseModel):
     resources: int = 0
     findings: int = 0
     tokens_used: int = Field(0, alias="tokensUsed")
+    estimated_cost_usd: float = Field(0.0, alias="estimatedCostUsd")
 
     model_config = {"populate_by_name": True}
 
@@ -93,6 +100,7 @@ class RunSummary(BaseModel):
     status: RunStatus
     phase: RunPhase | None = None
     progress: float = 0.0
+    tenant_id: str = Field("local", alias="tenantId")
     created_at: datetime = Field(default_factory=_now, alias="createdAt")
 
     model_config = {"populate_by_name": True}

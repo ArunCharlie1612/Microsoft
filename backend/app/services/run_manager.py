@@ -69,12 +69,13 @@ class RunManager:
         except Exception:  # noqa: BLE001
             logger.warning("Failed to persist run %s.", detail.run_id, exc_info=True)
 
-    def create(self, req: CreateRunRequest) -> RunDetail:
+    def create(self, req: CreateRunRequest, tenant_id: str = "local") -> RunDetail:
         run_id = f"run_{uuid.uuid4().hex[:10]}"
         detail = RunDetail(
             runId=run_id,
             name=req.name,
             status=RunStatus.QUEUED,
+            tenantId=tenant_id,
             agents=[AgentState(agentId=a) for a in _AGENT_IDS],
             stats=RunStats(),
         )
@@ -102,6 +103,7 @@ class RunManager:
                 resources=stats.get("resources", 0),
                 findings=stats.get("findings", 0),
                 tokensUsed=stats.get("tokens_used", 0),
+                estimatedCostUsd=stats.get("estimated_cost_usd", 0.0),
             )
         except Exception:  # noqa: BLE001
             detail.status = RunStatus.FAILED
@@ -112,8 +114,11 @@ class RunManager:
     def get(self, run_id: str) -> RunDetail | None:
         return self._runs.get(run_id)
 
-    def list(self) -> list[RunDetail]:
-        return sorted(self._runs.values(), key=lambda r: r.created_at, reverse=True)
+    def list(self, tenant_id: str | None = None) -> list[RunDetail]:
+        runs = self._runs.values()
+        if tenant_id is not None:
+            runs = [r for r in runs if r.tenant_id == tenant_id]
+        return sorted(runs, key=lambda r: r.created_at, reverse=True)
 
     async def cancel(self, run_id: str) -> bool:
         task = self._tasks.get(run_id)

@@ -65,10 +65,30 @@ class Settings(BaseSettings):
     github_remediation_repo: str = ""
     github_token: str = ""
     github_base_branch: str = "main"
+    # Remediation PRs are an external side effect; opt-in only.
+    github_pr_enabled: bool = False
+
+    # NVD (real CVE lookups when AI Search index is not configured)
+    nvd_api_key: str = ""
+    nvd_lookups_enabled: bool = True
 
     # Safety guardrails
     breachsim_allowed_subscriptions: str = ""
     breachsim_sandbox_only: bool = True
+    # Require an explicit authorization-to-test acknowledgement on every run.
+    breachsim_require_consent: bool = True
+    # Live read-only recon against the target subscription (Azure Resource Graph).
+    breachsim_live_recon: bool = False
+
+    # Auth — decoupled from app_env so the production identity flow can be enabled
+    # independently of the OpenAI/Cosmos stub behaviour.
+    breachsim_require_auth: bool = False
+
+    # Rate limiting (run creation) — token bucket per caller.
+    rate_limit_runs_per_minute: int = 10
+
+    # Observability
+    applicationinsights_connection_string: str = ""
 
     # Demo pacing — delay (ms) between swarm phases so the live feed is watchable
     # even when agents return instantly (stub mode). Set 0 in production.
@@ -85,6 +105,16 @@ class Settings(BaseSettings):
     @property
     def is_local(self) -> bool:
         return self.app_env == "local"
+
+    @property
+    def auth_enabled(self) -> bool:
+        """Whether Entra bearer-token auth is enforced.
+
+        Auth is on in any non-local environment, or whenever explicitly requested
+        via ``breachsim_require_auth`` (lets us protect a deployed demo without
+        switching the OpenAI/Cosmos stub behaviour that keys off ``app_env``).
+        """
+        return self.breachsim_require_auth or not self.is_local
 
     @property
     def use_managed_identity(self) -> bool:

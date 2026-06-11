@@ -22,6 +22,7 @@ from app.agents.risk import RiskAgent
 from app.agents.security import SecurityAgent
 from app.agents.validator import ValidatorAgent
 from app.config import settings
+from app.core import cost
 from app.core.events import event_bus
 from app.core.logging import get_logger
 from app.models.schemas import RunPhase
@@ -62,10 +63,11 @@ class SwarmOrchestrator:
 
     async def run(self, run_id: str, scope: dict[str, Any]) -> dict[str, Any]:
         ctx = AgentContext(run_id, scope)
+        cost.begin_run(run_id)
         await event_bus.publish(
             run_id,
             "breachsim.run.started",
-            {"agentId": "orchestrator", "summary": "Swarm deployed into target tenant"},
+            {"agentId": "orchestrator", "summary": "Swarm started against target scope"},
         )
         try:
             await self._phase(run_id, RunPhase.RECON, 0.1)
@@ -94,19 +96,29 @@ class SwarmOrchestrator:
             await self._phase(run_id, RunPhase.REPORT, 0.97)
             result = await self.memory.run(ctx)
 
+            remediation = ctx.blackboard.get("remediation", {})
+            if remediation.get("pr_url"):
+                completion_summary = (
+                    f"Run complete — remediation PR opened: {remediation['pr_url']}"
+                )
+            elif remediation.get("status") == "proposed":
+                completion_summary = "Run complete — remediation proposed (PR creation disabled)"
+            else:
+                completion_summary = "Run complete — remediation fix generated"
             await event_bus.publish(
                 run_id,
                 "breachsim.run.completed",
                 {
                     "agentId": "orchestrator",
-                    "summary": "Run complete — remediation PR opened",
+                    "summary": completion_summary,
                     "progress": 1.0,
                 },
             )
             result["stats"] = {
                 "resources": len(ctx.blackboard.get("resources", [])),
                 "findings": 1 if ctx.blackboard.get("risk") else 0,
-                "tokens_used": ctx.tokens_used,
+                "tokens_used": cost.usage_for(run_id)["totalTokens"],
+                "estimated_cost_usd": cost.usage_for(run_id)["estimatedCostUsd"],
             }
             return result
         except Exception as exc:  # noqa: BLE001

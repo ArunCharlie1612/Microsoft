@@ -24,6 +24,7 @@ class ValidatorAgent(BaseAgent):
             "validations": [
                 {
                     "order": r["order"],
+                    "technique": r.get("technique"),
                     "validated": bool(r.get("success")),
                     "reproduction": r.get("result", ""),
                 }
@@ -31,6 +32,11 @@ class ValidatorAgent(BaseAgent):
             ]
         }
         out = await self.reason(prompt, fallback=fallback)
+        # Ensure each validation carries its technique (the model may omit it) so the
+        # deterministic risk scorer can weight the chain correctly.
+        by_order = {r["order"]: r.get("technique") for r in results}
+        for v in out.get("validations", []):
+            v.setdefault("technique", by_order.get(v.get("order")))
         validated = [v for v in out["validations"] if v["validated"]]
         ctx.blackboard["validations"] = out["validations"]
         await self.emit(

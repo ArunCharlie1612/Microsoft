@@ -6,6 +6,7 @@ from typing import Any
 
 from app.agents.base import AgentContext, BaseAgent
 from app.config import settings
+from app.core.azure_scanner import scan_subscription
 from app.core.cosmos import repository
 
 
@@ -50,7 +51,19 @@ class ReconAgent(BaseAgent):
                 "12 resources, 1 public blob with anonymous read, 1 over-privileged identity"
             ),
         }
-        result = await self.reason(prompt, fallback=fallback)
+
+        # Prefer a REAL read-only scan of the target subscription when live recon is
+        # enabled. Fall back to model reasoning, then to the deterministic stub, so a
+        # run never hard-fails on missing permissions or an offline environment.
+        live = False
+        result: dict[str, Any] | None = None
+        if settings.breachsim_live_recon:
+            result = await scan_subscription(ctx.scope.get("subscription_id", ""))
+            live = result is not None
+        if result is None:
+            result = await self.reason(prompt, fallback=fallback)
+        result["live"] = live
+
 
         # Persist resources + threat-graph nodes. Track a name -> node-id map so the
         # Planner can wire the attack chain to these exact nodes (avoids orphan edges).
@@ -74,5 +87,11 @@ class ReconAgent(BaseAgent):
             )
         ctx.blackboard["resources"] = result["resources"]
         ctx.blackboard["resource_node_ids"] = resource_node_ids
-        await self.emit(ctx, result["summary"], {"resourceCount": len(result["resources"])})
+        ctx.blackboard["recon_live"] = live
+        source = "live Azure Resource Graph scan" if live else "modeled (no live scan)"
+        await self.emit(
+            ctx,
+            f"{result['summary']} [{source}]",
+            {"resourceCount": len(result["resources"]), "live": live},
+        )
         return result

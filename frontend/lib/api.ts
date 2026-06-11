@@ -57,11 +57,21 @@ export function toText(value: unknown): string {
   return String(value);
 }
 
-export async function createRun(name: string, scope: RunScope): Promise<CreateRunResponse> {
+export async function createRun(
+  name: string,
+  scope: RunScope,
+  authorizedBy = "demo-operator"
+): Promise<CreateRunResponse> {
   const res = await fetch(`${BASE}/v1/runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, scope }),
+    body: JSON.stringify({
+      name,
+      scope,
+      // Authorization-to-test attestation (required by the API).
+      authorizationAcknowledged: true,
+      authorizedBy,
+    }),
   });
   if (!res.ok) throw new Error(`createRun failed: ${res.status}`);
   return res.json();

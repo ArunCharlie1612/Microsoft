@@ -68,6 +68,14 @@ class OpenAIClient:
                 {"role": "user", "content": user_prompt},
             ],
         )
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            from app.core.cost import record_usage
+
+            record_usage(
+                getattr(usage, "prompt_tokens", 0) or 0,
+                getattr(usage, "completion_tokens", 0) or 0,
+            )
         content = resp.choices[0].message.content or "{}"
         try:
             return json.loads(content)

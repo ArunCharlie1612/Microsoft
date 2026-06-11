@@ -13,7 +13,9 @@ azure-eventgrid==4.20.0
 azure-search-documents==11.5.1
 azure-keyvault-secrets==4.8.0
 azure-storage-blob==12.23.1
+azure-mgmt-resourcegraph==8.0.0
 azure-monitor-opentelemetry==1.6.1
+opentelemetry-instrumentation-fastapi==0.48b0
 
 # AI / Agents
 openai==1.51.0
@@ -22,6 +24,7 @@ semantic-kernel==1.11.0
 
 # GitHub remediation PRs
 PyGithub==2.4.0
+PyJWT[crypto]==2.9.0
 
 # Tooling
 ruff==0.6.9

@@ -9,6 +9,7 @@ import httpx
 
 from app.agents.base import AgentContext, BaseAgent
 from app.config import settings
+from app.core.github_auth import resolve_github_token
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -37,7 +38,10 @@ class RemediationAgent(BaseAgent):
         gracefully so a swarm run never breaks because of remediation delivery).
         """
         repo = settings.github_remediation_repo
-        token = settings.github_token
+        if not settings.github_pr_enabled:
+            logger.info("PR creation disabled (github_pr_enabled=false) — proposing fix only.")
+            return None
+        token = await resolve_github_token()
         if not repo or not token:
             logger.info("GitHub not configured — simulating PR (no real PR opened).")
             return None
@@ -129,17 +133,24 @@ class RemediationAgent(BaseAgent):
         pr_url = await self.open_github_pr(
             ctx.run_id, fix["pr_title"], fix["pr_body"], fix["diff"]
         )
+        if pr_url:
+            status = "open"
+        elif settings.github_pr_enabled:
+            status = "simulated"
+        else:
+            status = "proposed"
         result = {
             "iac_type": fix["iac_type"],
             "pr_url": pr_url,
-            "status": "open" if pr_url else "simulated",
+            "status": status,
             "diff": fix["diff"],
         }
         ctx.blackboard["remediation"] = result
-        summary = (
-            f"Remediation PR opened: {pr_url}"
-            if pr_url
-            else "Remediation fix generated (simulated PR — GitHub not configured)"
-        )
+        if pr_url:
+            summary = f"Remediation PR opened: {pr_url}"
+        elif status == "proposed":
+            summary = "Remediation fix proposed (PR creation disabled)"
+        else:
+            summary = "Remediation fix generated (simulated PR — GitHub not configured)"
         await self.emit(ctx, summary, {"remediation": result})
         return result

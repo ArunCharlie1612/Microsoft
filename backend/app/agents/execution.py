@@ -20,23 +20,25 @@ class ExecutionAgent(BaseAgent):
     )
 
     async def run_sandbox_payload(self, step: dict[str, Any]) -> dict[str, Any]:
-        """Invoke the network-isolated Azure Functions sandbox for one step.
+        """Produce the outcome for one approved step.
 
-        In demo mode, returns a deterministic successful simulation. In prod, this
-        calls the Functions endpoint over a private VNet with no prod peering.
+        BreachSim does NOT execute live exploits. Each step is *modeled*: we record the
+        expected outcome of the technique against the target so analysts can reason about
+        the kill chain without any real-world action. A future, opt-in sandbox (isolated
+        Azure Functions on a private VNet) could replace this with real, contained
+        execution — until then every result is explicitly labelled ``mode="modeled"`` so
+        the UI and reports never overstate what happened.
         """
-        if not settings.is_local:
-            # Real call would go here (httpx POST to Functions sandbox URL with MI auth).
-            pass
-        simulated = {
-            "T1595": "Public endpoint confirmed: https://stbreachdemo.blob.core.windows.net/configs",
-            "T1530": "Downloaded appsettings.json (contains AccountKey=***redacted***)",
-            "T1078": "Authenticated to kv-breach-demo; listed 4 secrets",
+        modeled = {
+            "T1595": "Public endpoint reachable: https://stbreachdemo.blob.core.windows.net/configs",
+            "T1530": "Anonymous container read would expose appsettings.json (connection string)",
+            "T1078": "Leaked credential would authenticate to kv-breach-demo (4 secrets readable)",
         }
         return {
             "order": step["order"],
             "technique": step["technique"],
-            "result": simulated.get(step["technique"], "step executed"),
+            "mode": "modeled",
+            "result": modeled.get(step["technique"], "outcome modeled (no live execution)"),
             "success": True,
             "artifactRef": f"blob://artifacts/{step['order']}.json",
         }
@@ -56,11 +58,13 @@ class ExecutionAgent(BaseAgent):
                     "id": f"{ctx.run_id}_aud_{step['order']}",
                     "run_id": ctx.run_id,
                     "actor": self.agent_id,
-                    "action": "sandbox_payload_run",
+                    "action": "modeled_step",
                     "before": None,
                     "after": res,
                 },
             )
         ctx.blackboard["exec_results"] = results
-        await self.emit(ctx, f"{len(results)} steps executed in sandbox", {"results": results})
+        await self.emit(
+            ctx, f"{len(results)} steps modeled (no live execution)", {"results": results}
+        )
         return {"results": results}
