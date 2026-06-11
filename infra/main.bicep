@@ -51,6 +51,6 @@ output AZURE_SEARCH_ENDPOINT string = platform.outputs.searchEndpoint
 output COSMOS_ENDPOINT string = platform.outputs.cosmosEndpoint
 output EVENTGRID_TOPIC_ENDPOINT string = platform.outputs.eventGridEndpoint
 output AZURE_KEY_VAULT_URI string = platform.outputs.keyVaultUri
-output CONTAINER_REGISTRY_ENDPOINT string = platform.outputs.acrLoginServer
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = platform.outputs.acrLoginServer
 output API_URI string = platform.outputs.apiUri
 output WEB_URI string = platform.outputs.webUri

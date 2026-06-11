@@ -1,0 +1,14 @@
+# Keep the build context small + stable (fixes azd remote build "tar: write too long").
+node_modules/
+.next/
+out/
+.git/
+.gitignore
+npm-debug.log*
+.env
+.env.*
+!.env.local.example
+*.log
+.DS_Store
+.vscode/
+coverage/

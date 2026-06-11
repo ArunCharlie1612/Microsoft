@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "4458712991537739597"
+      "templateHash": "6920628611711030068"
     }
   },
   "parameters": {
@@ -747,7 +747,7 @@
       "type": "string",
       "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'platform'), '2025-04-01').outputs.keyVaultUri.value]"
     },
-    "CONTAINER_REGISTRY_ENDPOINT": {
+    "AZURE_CONTAINER_REGISTRY_ENDPOINT": {
       "type": "string",
       "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'platform'), '2025-04-01').outputs.acrLoginServer.value]"
     },

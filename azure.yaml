@@ -9,14 +9,12 @@ services:
     host: containerapp
     docker:
       path: ./Dockerfile
-      remoteBuild: true
   web:
     project: ./frontend
     language: ts
     host: containerapp
     docker:
       path: ./Dockerfile
-      remoteBuild: true
       buildArgs:
         - NEXT_PUBLIC_API_BASE=${API_URI}
   # NOTE: the `functions` sandbox is not provisioned in the demo infra (execution is
