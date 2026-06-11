@@ -32,12 +32,18 @@ export function AttackGraph({ graph }: { graph: Graph }) {
     svg.selectAll("*").remove();
 
     const nodes: SimNode[] = graph.nodes.map((n) => ({ ...n }));
-    const links: SimLink[] = graph.edges.map((e) => ({
-      source: e.from,
-      target: e.to,
-      relation: e.relation,
-      confidence: e.confidence,
-    }));
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    // Drop edges that reference a node not present in the current graph. D3's
+    // forceLink throws a hard "missing: <id>" error on dangling edges, which can
+    // happen with partial graphs during streaming or unexpected LLM output.
+    const links: SimLink[] = graph.edges
+      .filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to))
+      .map((e) => ({
+        source: e.from,
+        target: e.to,
+        relation: e.relation,
+        confidence: e.confidence,
+      }));
 
     const sim = d3
       .forceSimulation(nodes)

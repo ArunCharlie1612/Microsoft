@@ -1,6 +1,6 @@
 "use client";
 
-import { AgentEvent } from "@/lib/api";
+import { AgentEvent, toText } from "@/lib/api";
 import clsx from "clsx";
 
 const AGENT_COLORS: Record<string, string> = {
@@ -28,7 +28,7 @@ export function AgentFeed({ events }: { events: AgentEvent[] }) {
             <span className={clsx("font-semibold w-24 shrink-0", AGENT_COLORS[e.agentId] ?? "text-slate-300")}>
               {e.agentId}
             </span>
-            <span className="text-slate-300">{e.summary}</span>
+            <span className="text-slate-300">{toText(e.summary)}</span>
           </li>
         ))}
       </ul>

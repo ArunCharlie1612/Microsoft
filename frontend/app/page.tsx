@@ -11,6 +11,7 @@ import {
   getGraph,
   seedDemo,
   streamEvents,
+  toText,
 } from "@/lib/api";
 import { Play, ShieldAlert } from "lucide-react";
 import { useState } from "react";
@@ -108,9 +109,9 @@ export default function DashboardPage() {
           {findings.map((f, i) => (
             <div key={i} className="border-t border-white/5 pt-4 mt-4 first:border-0 first:pt-0 first:mt-0">
               <div className="flex items-center justify-between">
-                <p className="font-medium">{f.title}</p>
+                <p className="font-medium">{toText(f.title)}</p>
                 <span className="text-xs px-2 py-1 rounded bg-breach/20 text-breach uppercase">
-                  {f.severity}
+                  {toText(f.severity)}
                 </span>
               </div>
               {f.remediation?.pr_url && (
@@ -120,7 +121,7 @@ export default function DashboardPage() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  → Remediation PR opened ({f.remediation.iac_type})
+                  → Remediation PR opened ({toText(f.remediation.iac_type)})
                 </a>
               )}
             </div>

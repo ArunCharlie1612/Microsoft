@@ -39,6 +39,24 @@ export interface AttackGraph {
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
+/**
+ * Coerce any value into a safe, human-readable string for rendering.
+ * The LLM may return an object/array where a plain string is expected; rendering
+ * such a value directly throws React error #31. This guarantees a renderable string.
+ */
+export function toText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(toText).join(", ");
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([k, v]) => `${k}: ${toText(v)}`)
+      .join(", ");
+  }
+  return String(value);
+}
+
 export async function createRun(name: string, scope: RunScope): Promise<CreateRunResponse> {
   const res = await fetch(`${BASE}/v1/runs`, {
     method: "POST",

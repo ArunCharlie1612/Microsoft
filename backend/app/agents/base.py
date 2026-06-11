@@ -17,6 +17,22 @@ from app.core.openai_client import openai_client
 logger = get_logger(__name__)
 
 
+def _coerce_summary(summary: Any) -> str:
+    """Ensure an event summary is always a human-readable string.
+
+    The LLM occasionally returns a structured object (e.g. a dict of metrics) for a
+    field the prompt described as a free-text summary. Rendering such an object would
+    crash the React client, so we flatten it to a compact, readable string here.
+    """
+    if isinstance(summary, str):
+        return summary
+    if isinstance(summary, dict):
+        return ", ".join(f"{k}: {v}" for k, v in summary.items())
+    if isinstance(summary, (list, tuple)):  # noqa: UP038
+        return ", ".join(str(item) for item in summary)
+    return str(summary)
+
+
 class AgentContext:
     """Shared, run-scoped context passed between agents via the orchestrator."""
 
@@ -37,11 +53,11 @@ class BaseAgent(abc.ABC):
     #: Event type emitted on successful completion.
     completion_event: str = "breachsim.agent.completed"
 
-    async def emit(self, ctx: AgentContext, summary: str, payload: dict[str, Any]) -> None:
+    async def emit(self, ctx: AgentContext, summary: Any, payload: dict[str, Any]) -> None:
         await event_bus.publish(
             ctx.run_id,
             self.completion_event,
-            {"agentId": self.agent_id, "summary": summary, **payload},
+            {"agentId": self.agent_id, "summary": _coerce_summary(summary), **payload},
         )
 
     async def reason(
