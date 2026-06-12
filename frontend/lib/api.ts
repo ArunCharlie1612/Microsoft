@@ -145,6 +145,24 @@ export async function getFindings(runId: string): Promise<any[]> {
   return res.json();
 }
 
+/**
+ * Submit an operator triage verdict on a finding. The swarm's Validator agent learns
+ * from these verdicts to re-calibrate severity on future runs. Returns the updated finding.
+ */
+export async function submitFeedback(
+  findingId: string,
+  verdict: "confirmed" | "dismissed",
+  note?: string
+): Promise<any> {
+  const res = await fetch(`${BASE}/v1/findings/${findingId}/feedback`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ verdict, note }),
+  });
+  if (!res.ok) throw new Error(`feedback failed: ${res.status}`);
+  return res.json();
+}
+
 /** Cancel an in-flight run. Best-effort: never throws so sign-out is never blocked. */
 export async function cancelRun(runId: string): Promise<void> {
   try {

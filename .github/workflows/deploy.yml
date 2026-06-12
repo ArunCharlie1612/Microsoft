@@ -2,7 +2,7 @@ name: Deploy BreachSim
 
 on:
   push:
-    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -34,6 +34,83 @@ jobs:
         run: |
           npm install
           npm run type-check
+
+  # ──────────────────────────────────────────────────────────────
+  # dependency-scan
+  # WHAT: Audits the backend Python dependencies (requirements.txt) against the
+  #       PyPI Advisory Database / OSV using pip-audit.
+  # WHY:  Catches known-vulnerable third-party packages (CVEs) before they ship.
+  #       For a security product like BreachSim, a vulnerable dependency in our
+  #       own supply chain would undermine the whole value proposition, so the
+  #       job FAILS the build if pip-audit finds any vulnerable package.
+  #       The full JSON report is uploaded as an artifact for review.
+  # ──────────────────────────────────────────────────────────────
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Run pip-audit
+        working-directory: backend
+        # pip-audit exits non-zero when any vulnerability is found, which fails
+        # this step (and the job) as required.
+        run: |
+          pip-audit --requirement requirements.txt \
+            --format json --output pip-audit-report.json
+      - name: Upload dependency-scan report
+        # Always upload so the report is available even when vulnerabilities
+        # were found and the previous step failed.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-scan-report
+          path: backend/pip-audit-report.json
+
+  # ──────────────────────────────────────────────────────────────
+  # sast-scan
+  # WHAT: Static Application Security Testing of our own Python source with
+  #       Bandit (insecure patterns: hardcoded secrets, shell injection,
+  #       unsafe deserialization, weak crypto, etc.).
+  # WHY:  pip-audit covers third-party CVEs; Bandit covers the code WE write.
+  #       Together they give defence-in-depth on the supply chain and the app.
+  #       Bandit is run at the medium severity level for visibility, but the job
+  #       only FAILS on HIGH severity findings to keep the signal actionable.
+  #       The full JSON report is uploaded as an artifact for review.
+  # ──────────────────────────────────────────────────────────────
+  sast-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install bandit
+        run: pip install bandit
+      - name: Run bandit
+        # Do not fail here: Bandit returns non-zero on any medium+ finding, but
+        # we only want to gate on HIGH. The dedicated check step below enforces
+        # that. The report is always written via -o.
+        run: |
+          bandit -r . -x ./tests,./node_modules \
+            --severity-level medium --format json -o bandit-report.json || true
+      - name: Upload sast report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-report
+          path: bandit-report.json
+      - name: Fail on HIGH severity findings
+        run: |
+          high_count=$(python -c "import json; print(sum(1 for r in json.load(open('bandit-report.json')).get('results', []) if r.get('issue_severity') == 'HIGH'))")
+          echo "Bandit HIGH severity findings: $high_count"
+          if [ "$high_count" -gt 0 ]; then
+            echo "::error::Bandit found $high_count HIGH severity issue(s)."
+            exit 1
+          fi
 
   deploy:
     needs: test

@@ -79,6 +79,21 @@ class CosmosRepository:
     async def save(self, container: str, doc: dict[str, Any]) -> dict[str, Any]:
         return await self.container(container).upsert_item(doc)
 
+    async def get(self, container: str, doc_id: str) -> dict[str, Any] | None:
+        """Read a single document by id, or ``None`` if it does not exist."""
+        c = self.container(container)
+        if isinstance(c, _InMemoryContainer):
+            return c._items.get(doc_id)
+        try:
+            return await c.read_item(item=doc_id, partition_key=doc_id)
+        except Exception:  # noqa: BLE001
+            # Partition key may differ from id — fall back to a point query.
+            query = "SELECT * FROM c WHERE c.id = @id"
+            params = [{"name": "@id", "value": doc_id}]
+            async for item in c.query_items(query=query, parameters=params):
+                return item
+            return None
+
     async def list_by_run(self, container: str, run_id: str) -> list[dict[str, Any]]:
         c = self.container(container)
         if isinstance(c, _InMemoryContainer):

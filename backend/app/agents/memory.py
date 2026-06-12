@@ -26,14 +26,26 @@ class MemoryAgent(BaseAgent):
         return []
 
     async def run(self, ctx: AgentContext) -> dict[str, Any]:
+        risk = ctx.blackboard.get("risk", {})
+        # Use the same (resource_type, technique) key the Validator computed so this
+        # finding lines up with future operator-feedback lookups.
+        key = ctx.blackboard.get("finding_key", {})
+        # Evidence carries the audit trail, including any feedback-driven severity change.
+        evidence: list[str] = []
+        if risk.get("rationale"):
+            evidence.append(risk["rationale"])
+        if risk.get("feedback_adjustment"):
+            evidence.append(risk["feedback_adjustment"])
         finding = {
             "id": f"{ctx.run_id}_finding",
             "run_id": ctx.run_id,
             "title": ctx.blackboard.get("plan", {}).get("narrative", "Attack chain"),
-            "technique": "T1530",
-            "severity": ctx.blackboard.get("risk", {}).get("severity", "medium"),
+            "resource_type": key.get("resource_type", "unknown"),
+            "technique": key.get("technique", "T1530"),
+            "severity": risk.get("severity", "medium"),
             "validated": True,
-            "risk": ctx.blackboard.get("risk"),
+            "risk": risk or None,
+            "evidence": evidence,
             "compliance": ctx.blackboard.get("compliance", []),
             "remediation": ctx.blackboard.get("remediation"),
         }

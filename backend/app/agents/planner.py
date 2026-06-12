@@ -5,8 +5,63 @@ from __future__ import annotations
 from typing import Any
 
 from app.agents.base import AgentContext, BaseAgent
+from app.agents.enrichment.nvd_client import fetch_cves_for_keyword
 from app.config import settings
 from app.core.cosmos import repository
+from app.core.logging import get_logger
+from app.core.openai_client import openai_client
+
+logger = get_logger(__name__)
+
+
+def _resource_keyword(resource: dict[str, Any]) -> str:
+    """Derive a short, NVD-friendly keyword from a recon resource.
+
+    Maps Azure resource type URIs (e.g. ``Microsoft.Storage/storageAccounts``) to a
+    coarse keyword (``storage``, ``keyvault``, ``vm``) the NVD keyword search matches
+    well. Falls back to the trailing segment of the type when unmapped.
+    """
+    rtype = str(resource.get("type", "")).lower()
+    mapping = {
+        "storage": "storage",
+        "keyvault": "keyvault",
+        "virtualmachines": "vm",
+        "compute": "vm",
+        "sql": "sql",
+        "network": "network",
+        "containerservice": "kubernetes",
+        "web": "appservice",
+    }
+    for needle, keyword in mapping.items():
+        if needle in rtype:
+            return keyword
+    tail = rtype.split("/")[-1] if "/" in rtype else rtype
+    return tail or "azure"
+
+
+async def _build_cve_context(resources: list[dict[str, Any]]) -> str:
+    """Fetch live CVEs per resource type and format them for the system prompt.
+
+    Returns an empty string when no CVEs are found so the prompt is unchanged.
+    Each unique resource keyword is queried once; only the top 3 CVEs are injected.
+    """
+    seen: set[str] = set()
+    blocks: list[str] = []
+    for resource in resources:
+        keyword = _resource_keyword(resource)
+        if keyword in seen:
+            continue
+        seen.add(keyword)
+        cves = await fetch_cves_for_keyword(keyword)
+        if not cves:
+            continue
+        lines = [f"Relevant CVEs for {keyword}:"]
+        for cve in cves[:3]:
+            lines.append(
+                f"- {cve['cve_id']} (CVSS {cve['cvss_score']}): {cve['description'][:120]}..."
+            )
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 class PlannerAgent(BaseAgent):
@@ -29,6 +84,16 @@ class PlannerAgent(BaseAgent):
             f"Resources: {resources}\nCVE evidence: {evidence}\n"
             "Compose the highest-confidence attack chain."
         )
+
+        # Live NVD enrichment runs only in deployed mode (Azure OpenAI configured).
+        # In stub mode the LLM call returns the deterministic fallback, so querying
+        # NVD would add latency without affecting the offline result — skip it.
+        cve_context = ""
+        if settings.azure_openai_api_key and resources:
+            cve_context = await _build_cve_context(resources)
+            if cve_context:
+                logger.info("Planner enriched prompt with live NVD CVE context.")
+
         fallback = {
             "steps": [
                 {
@@ -61,7 +126,14 @@ class PlannerAgent(BaseAgent):
                 "Key Vault access via over-privileged identity."
             ),
         }
-        plan = await self.reason(prompt, fallback=fallback, temperature=0.3)
+        # Inject live CVE context into the system prompt when available (deployed mode).
+        if cve_context:
+            system_prompt = f"{self.system_prompt}\n\n{cve_context}"
+            plan = await openai_client.reason_json(
+                system_prompt, prompt, temperature=0.3, fallback=fallback
+            )
+        else:
+            plan = await self.reason(prompt, fallback=fallback, temperature=0.3)
 
         # Build a coherent kill-chain in the threat graph: an adversary origin node linked
         # through each step's target asset. Reuse recon's resource nodes where the asset

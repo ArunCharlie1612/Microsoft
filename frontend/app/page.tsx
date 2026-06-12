@@ -4,6 +4,8 @@ import { AgentFeed } from "@/components/AgentFeed";
 import { AgentRoster } from "@/components/AgentRoster";
 import { AttackGraph } from "@/components/AttackGraph";
 import { AuthGate } from "@/components/AuthGate";
+import { FindingsPanel } from "@/components/FindingsPanel";
+import { OnboardingTour } from "@/components/OnboardingTour";
 import { UsagePanel } from "@/components/UsagePanel";
 import {
   AgentEvent,
@@ -14,9 +16,8 @@ import {
   getGraph,
   seedDemo,
   streamEvents,
-  toText,
 } from "@/lib/api";
-import { Play, ShieldAlert } from "lucide-react";
+import { Play } from "lucide-react";
 import { useRef, useState } from "react";
 
 const DEMO_SCOPE = {
@@ -94,6 +95,7 @@ export default function DashboardPage() {
 
   return (
     <AuthGate onSignOut={handleSignOut}>
+      <OnboardingTour />
       <div className="space-y-6">
         <section className="flex items-center justify-between">
           <div>
@@ -103,6 +105,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <button
+            id="new-run-button"
             onClick={launch}
             disabled={running}
             className="flex items-center gap-2 bg-breach hover:bg-breach/90 disabled:opacity-50 text-white font-medium px-5 py-2.5 rounded-lg glow-breach transition"
@@ -121,12 +124,14 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-3">
-            <AgentRoster active={active} completed={completed} />
-            <div className="mt-6">
+            <div id="swarm-console">
+              <AgentRoster active={active} completed={completed} />
+            </div>
+            <div id="api-key-panel" className="mt-6">
               <UsagePanel refreshKey={usageKey} />
             </div>
           </div>
-          <div className="col-span-5">
+          <div id="attack-graph" className="col-span-5">
             <AttackGraph graph={graph} />
           </div>
           <div className="col-span-4">
@@ -134,33 +139,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {findings.length > 0 && (
-          <section className="glass p-5">
-            <h3 className="flex items-center gap-2 text-sm uppercase tracking-widest text-breach mb-4">
-              <ShieldAlert size={16} /> Findings & Remediation
-            </h3>
-            {findings.map((f, i) => (
-              <div key={i} className="border-t border-white/5 pt-4 mt-4 first:border-0 first:pt-0 first:mt-0">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium">{toText(f.title)}</p>
-                  <span className="text-xs px-2 py-1 rounded bg-breach/20 text-breach uppercase">
-                    {toText(f.severity)}
-                  </span>
-                </div>
-                {f.remediation?.pr_url && (
-                  <a
-                    href={f.remediation.pr_url}
-                    className="text-safe text-sm underline mt-2 inline-block"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    → Remediation PR opened ({toText(f.remediation.iac_type)})
-                  </a>
-                )}
-              </div>
-            ))}
-          </section>
-        )}
+        <FindingsPanel findings={findings} />
       </div>
     </AuthGate>
   );

@@ -29,6 +29,13 @@ param githubRemediationRepo string = ''
 @description('Base branch for remediation PRs.')
 param githubBaseBranch string = 'main'
 
+@allowed([
+  'dev'
+  'prod'
+])
+@description('Environment suffix (dev/prod) used in resource names.')
+param environmentSuffix string = 'dev'
+
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var prefix = 'bsim'
 var tags = { 'azd-env-name': environmentName, app: 'breachsim' }
@@ -52,6 +59,7 @@ module platform 'modules/platform.bicep' = {
     searchSku: searchSku
     githubRemediationRepo: githubRemediationRepo
     githubBaseBranch: githubBaseBranch
+    environmentSuffix: environmentSuffix
     tags: tags
   }
 }
@@ -66,3 +74,6 @@ output AZURE_KEY_VAULT_URI string = platform.outputs.keyVaultUri
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = platform.outputs.acrLoginServer
 output API_URI string = platform.outputs.apiUri
 output WEB_URI string = platform.outputs.webUri
+
+@secure()
+output serviceBusConnectionString string = platform.outputs.serviceBusConnectionString

@@ -7,6 +7,13 @@ param resourceToken string
 param gptCapacity int
 param tags object
 
+@allowed([
+  'dev'
+  'prod'
+])
+@description('Environment suffix (dev/prod) used in resource names.')
+param environmentSuffix string = 'dev'
+
 @description('Region for the Azure OpenAI account (separate from primary region to satisfy gpt-4o quota).')
 param openAiLocation string = location
 
@@ -144,6 +151,32 @@ resource eventGrid 'Microsoft.EventGrid/topics@2024-06-01-preview' = {
   properties: { inputSchema: 'CloudEventSchemaV1_0' }
 }
 
+// ── Service Bus (durable swarm-run queue) ─────────────────────
+// Namespace name carries the requested breachsim-sb-<env> form plus the resource
+// token, since Service Bus namespace names must be globally unique.
+resource serviceBus 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
+  name: 'breachsim-sb-${environmentSuffix}-${resourceToken}'
+  location: location
+  tags: tags
+  sku: { name: 'Standard', tier: 'Standard' }
+}
+
+resource runsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
+  parent: serviceBus
+  name: 'breachsim-runs'
+  properties: {
+    maxDeliveryCount: 3
+    lockDuration: 'PT5M'
+    defaultMessageTimeToLive: 'P1D'
+  }
+}
+
+// Default namespace authorization rule used to derive the connection string.
+resource serviceBusAuthRule 'Microsoft.ServiceBus/namespaces/authorizationRules@2022-10-01-preview' existing = {
+  parent: serviceBus
+  name: 'RootManageSharedAccessKey'
+}
+
 // ── Container Registry + Apps environment ─────────────────────
 resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
   name: '${prefix}acr${resourceToken}'
@@ -195,6 +228,9 @@ var apiEnv = concat([
   { name: 'CORS_ORIGINS', value: webUrl }
   // Cosmos persistence via managed identity (no key) — runs/findings/graph survive restarts.
   { name: 'COSMOS_ENDPOINT', value: cosmos.properties.documentEndpoint }
+  // Durable swarm-run queue. When set, runs are dispatched to the worker via Service Bus.
+  { name: 'AZURE_SERVICE_BUS_CONNECTION_STRING', value: serviceBusAuthRule.listKeys().primaryConnectionString }
+  { name: 'AZURE_SERVICE_BUS_QUEUE_NAME', value: runsQueue.name }
 ], openAiEnv, githubEnv)
 
 module api 'containerapp.bicep' = {
@@ -287,3 +323,6 @@ output keyVaultUri string = keyVault.properties.vaultUri
 output acrLoginServer string = acr.properties.loginServer
 output apiUri string = api.outputs.uri
 output webUri string = web.outputs.uri
+
+@secure()
+output serviceBusConnectionString string = serviceBusAuthRule.listKeys().primaryConnectionString

@@ -54,7 +54,7 @@ async def create_run(
             status.HTTP_402_PAYMENT_REQUIRED,
             f"Daily run quota reached for the '{tenant.plan}' plan. Upgrade or try tomorrow.",
         )
-    detail = run_manager.create(req, tenant_id=principal.tenant_id)
+    detail = await run_manager.submit(req, tenant_id=principal.tenant_id)
     # Record the authorization-to-test attestation for audit.
     await repository.save(
         settings.cosmos_container_audit,
@@ -72,6 +72,7 @@ async def create_run(
         },
     )
     return {
+        "run_id": detail.run_id,
         "runId": detail.run_id,
         "status": detail.status.value,
         "createdAt": detail.created_at.isoformat(),
@@ -98,6 +99,25 @@ async def get_run(
     principal: Principal = Depends(require_role("breachsim.operator")),
 ) -> RunDetail:
     return _require_run_access(run_id, principal)
+
+
+@router.get("/runs/{run_id}/status")
+async def get_run_status(
+    run_id: str,
+    principal: Principal = Depends(require_role("breachsim.operator")),
+) -> dict:
+    """Return the run's current status from the data store (Cosmos or in-memory).
+
+    Reads the durable store first so worker-side progress is reflected even when a
+    separate process is executing the run; falls back to the in-memory cache.
+    """
+    detail = _require_run_access(run_id, principal)
+    doc = await repository.get(settings.cosmos_container_runs, run_id)
+    return {
+        "runId": run_id,
+        "status": (doc or {}).get("status", detail.status.value),
+        "progress": (doc or {}).get("progress", detail.progress),
+    }
 
 
 @router.post("/runs/{run_id}/cancel")

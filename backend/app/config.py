@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     eventgrid_topic_endpoint: str = ""
     eventgrid_topic_key: str = ""
 
+    # Azure Service Bus — durable queue for swarm run execution. When the
+    # connection string is unset, runs execute in-process (local/dev mode).
+    azure_service_bus_connection_string: str = ""
+    azure_service_bus_queue_name: str = "breachsim-runs"
+
     # Key Vault
     azure_key_vault_uri: str = ""
 
@@ -102,6 +107,11 @@ class Settings(BaseSettings):
     @property
     def billing_enabled(self) -> bool:
         return bool(self.stripe_api_key and self.stripe_price_pro)
+
+    @property
+    def service_bus_enabled(self) -> bool:
+        """Whether swarm runs are dispatched to a durable Service Bus queue."""
+        return bool(self.azure_service_bus_connection_string)
 
     # Auth — decoupled from app_env so the production identity flow can be enabled
     # independently of the OpenAI/Cosmos stub behaviour.

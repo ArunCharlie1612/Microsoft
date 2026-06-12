@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { TourButton } from "@/components/TourButton";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,7 +20,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <p className="text-xs text-muted">Agentic Red Team Swarm</p>
               </div>
             </div>
-            <span className="text-xs text-muted">Security in the Agentic Future</span>
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-muted">Security in the Agentic Future</span>
+              <TourButton />
+            </div>
           </header>
           <main className="p-6">{children}</main>
         </div>

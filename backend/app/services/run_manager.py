@@ -18,6 +18,7 @@ from app.models.schemas import (
     RunStats,
     RunStatus,
 )
+from app.services.queue import send_run_to_queue
 
 logger = get_logger(__name__)
 
@@ -80,12 +81,53 @@ class RunManager:
             stats=RunStats(),
         )
         self._runs[run_id] = detail
-        scope = req.scope.model_dump(by_alias=False)
         persist_task = asyncio.create_task(self._persist(detail))
         self._bg.add(persist_task)
         persist_task.add_done_callback(self._bg.discard)
-        self._tasks[run_id] = asyncio.create_task(self._execute(run_id, scope))
         return detail
+
+    async def submit(self, req: CreateRunRequest, tenant_id: str = "local") -> RunDetail:
+        """Register a run, then dispatch it for execution.
+
+        When a durable Service Bus queue is configured the run is enqueued for a
+        worker to execute (surviving API restarts); otherwise it runs in-process so
+        local/dev works without any cloud dependencies.
+        """
+        detail = self.create(req, tenant_id=tenant_id)
+        scope = req.scope.model_dump(by_alias=False)
+        queued = await send_run_to_queue(
+            detail.run_id, tenant_id, {"name": req.name, "scope": scope}
+        )
+        if not queued:
+            self._tasks[detail.run_id] = asyncio.create_task(self._execute(detail.run_id, scope))
+        return detail
+
+    async def execute_from_message(
+        self, run_id: str, tenant_id: str, payload: dict
+    ) -> RunStatus:
+        """Worker entrypoint: hydrate the run, run the swarm, and return its status.
+
+        Used by ``worker.py`` when consuming messages from the Service Bus queue.
+        The worker is a separate process, so the run detail is loaded from the
+        store (or rebuilt from the message) before execution.
+        """
+        detail = self._runs.get(run_id)
+        if detail is None:
+            doc = await repository.get(settings.cosmos_container_runs, run_id)
+            if doc is not None:
+                detail = RunDetail.model_validate(doc)
+            else:
+                detail = RunDetail(
+                    runId=run_id,
+                    name=payload.get("name", "queued run"),
+                    status=RunStatus.QUEUED,
+                    tenantId=tenant_id,
+                    agents=[AgentState(agentId=a) for a in _AGENT_IDS],
+                    stats=RunStats(),
+                )
+            self._runs[run_id] = detail
+        await self._execute(run_id, payload["scope"])
+        return self._runs[run_id].status
 
     async def _execute(self, run_id: str, scope: dict) -> None:
         detail = self._runs[run_id]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -76,6 +76,13 @@ class CreateRunRequest(BaseModel):
     authorized_by: str = Field("", alias="authorizedBy")
 
     model_config = {"populate_by_name": True}
+
+
+class FeedbackRequest(BaseModel):
+    """Operator triage verdict on a finding (feeds the Validator's learning loop)."""
+
+    verdict: Literal["confirmed", "dismissed"]
+    note: str | None = None
 
 
 class AgentState(BaseModel):
