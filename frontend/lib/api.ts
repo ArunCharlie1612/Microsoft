@@ -1,6 +1,6 @@
 /** Typed API client + SSE helpers for the BreachSim orchestrator. */
 
-import { authHeaders, getApiKey } from "./auth";
+import { activeCredential, authHeaders } from "./auth";
 
 export interface RunScope {
   subscriptionId: string;
@@ -135,6 +135,30 @@ export async function seedDemo(): Promise<unknown> {
   return res.json();
 }
 
+export interface RunStats {
+  resources: number;
+  findings: number;
+  tokensUsed: number;
+  estimatedCostUsd: number;
+}
+
+export interface RunDetail {
+  runId: string;
+  name: string;
+  status: string;
+  progress: number;
+  stats: RunStats;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+/** Fetch the full run result object (status, timing, stats). */
+export async function getRun(runId: string): Promise<RunDetail> {
+  const res = await fetch(`${BASE}/v1/runs/${runId}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`getRun failed: ${res.status}`);
+  return res.json();
+}
+
 export async function getGraph(runId: string): Promise<AttackGraph> {
   const res = await fetch(`${BASE}/v1/runs/${runId}/graph`, { headers: authHeaders() });
   return res.json();
@@ -182,8 +206,8 @@ export function streamEvents(
   onEvent: (e: AgentEvent) => void,
   onDone: () => void
 ): () => void {
-  // EventSource cannot set headers; pass the API key as a query param when present.
-  const key = getApiKey();
+  // EventSource cannot set headers; pass the active credential as a query param when present.
+  const key = activeCredential();
   const qs = key ? `?apiKey=${encodeURIComponent(key)}` : "";
   const es = new EventSource(`${BASE}/v1/runs/${runId}/events${qs}`);
   es.addEventListener("agent", (ev) => onEvent(JSON.parse((ev as MessageEvent).data)));

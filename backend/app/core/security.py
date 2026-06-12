@@ -43,13 +43,28 @@ async def get_principal(
         from app.services.tenant_manager import tenant_manager
 
         tenant = tenant_manager.resolve_api_key(api_key)
-        if not tenant or tenant.status != "active":
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or inactive API key")
-        return Principal(
-            sub=f"apikey:{tenant.id}",
-            tenant_id=tenant.id,
-            roles=["breachsim.operator"],
-        )
+        if tenant:
+            if tenant.status != "active":
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or inactive API key")
+            return Principal(
+                sub=f"apikey:{tenant.id}",
+                tenant_id=tenant.id,
+                roles=["breachsim.operator"],
+            )
+
+        # Not a self-service API key — accept a BreachSim-issued enterprise session JWT
+        # (from the Entra SSO login). The frontend presents both credentials identically.
+        from app.core.session_token import decode_session_token
+
+        claims = decode_session_token(api_key)
+        if claims:
+            return Principal(
+                sub=claims["sub"],
+                tenant_id=claims["tid"],
+                roles=claims.get("roles", ["breachsim.operator"]),
+            )
+
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or inactive API key")
 
     if not settings.auth_enabled:
         return Principal(sub="local-dev", tenant_id="local", roles=["breachsim.admin"])

@@ -109,6 +109,28 @@ class TenantManager:
     def get(self, tenant_id: str) -> Tenant | None:
         return self._tenants.get(tenant_id)
 
+    def get_by_email(self, email: str) -> Tenant | None:
+        """Return the tenant owning ``email`` (case-insensitive), or None."""
+        if not email:
+            return None
+        target = email.strip().lower()
+        for tenant in self._tenants.values():
+            if tenant.email.strip().lower() == target:
+                return tenant
+        return None
+
+    async def get_or_create_by_email(self, email: str, name: str = "") -> Tenant:
+        """Resolve the tenant for an SSO-authenticated user, creating one if needed.
+
+        Enterprise login (Entra SSO) keys the workspace off the verified email claim, so a
+        returning user always lands back in the same tenant.
+        """
+        existing = self.get_by_email(email)
+        if existing:
+            return existing
+        tenant, _raw = await self.create_tenant(name or email or "Enterprise workspace", email)
+        return tenant
+
     def get_by_stripe_customer(self, customer_id: str) -> Tenant | None:
         if not customer_id:
             return None

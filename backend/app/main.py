@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routes import demo, findings, health, runs, tenants
+from app.api.routes import auth, demo, findings, health, runs, tenants
 from app.config import settings
 from app.core.cosmos import repository
 from app.core.logging import configure_logging, get_logger
@@ -48,6 +48,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(runs.router)
 app.include_router(findings.router)
 app.include_router(demo.router)

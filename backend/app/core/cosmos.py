@@ -39,19 +39,35 @@ class CosmosRepository:
     """Repository wrapping Cosmos containers (or in-memory fallback)."""
 
     def __init__(self) -> None:
-        self._enabled = bool(settings.cosmos_endpoint)
+        self._enabled = settings.cosmos_configured
         self._client = None
         self._containers: dict[str, Any] = defaultdict(_InMemoryContainer)
 
+    @property
+    def backend(self) -> str:
+        """Which store is in use: ``"cosmos"`` or ``"memory"``."""
+        return "cosmos" if self._enabled else "memory"
+
     async def connect(self) -> None:
         if not self._enabled:
-            logger.info("Cosmos not configured — using in-memory store (demo mode).")
+            # In any non-local environment Cosmos is mandatory — the in-memory store
+            # is a local-dev convenience only and must never be used in deployment.
+            if not settings.is_local_environment:
+                raise RuntimeError(
+                    "COSMOS_CONNECTION_STRING is required in non-local environments. "
+                    "Set ENVIRONMENT=local to use the in-memory store."
+                )
+            logger.warning("Cosmos not configured — using in-memory store (local dev mode).")
             return
         # Lazy import so local mode needs no azure-cosmos at runtime.
         from azure.cosmos.aio import CosmosClient
         from azure.identity.aio import DefaultAzureCredential
 
-        if settings.cosmos_key:
+        if settings.cosmos_connection_string:
+            self._client = CosmosClient.from_connection_string(
+                settings.cosmos_connection_string
+            )
+        elif settings.cosmos_key:
             self._client = CosmosClient(settings.cosmos_endpoint, credential=settings.cosmos_key)
         else:
             self._client = CosmosClient(

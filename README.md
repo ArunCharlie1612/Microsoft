@@ -1,291 +1,210 @@
-<div align="center">
+# BreachSim — Agentic Red Team Swarm
 
-# 🛡️ BreachSim — Agentic Red Team Swarm
-
-**"Attackers don't sleep. Now neither does your red team."**
-
-An autonomous agent swarm that continuously probes your cloud posture and writes its own
-attack playbooks — *before real attackers do.*
-
-[![Azure](https://img.shields.io/badge/Azure-AI%20Foundry-0078D4?logo=microsoftazure&logoColor=white)](https://azure.microsoft.com/products/ai-foundry)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Theme](https://img.shields.io/badge/Theme-Security%20in%20the%20Agentic%20Future-red)](#)
-
-</div>
-
----
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [The Problem](#the-problem)
-3. [The Solution](#the-solution)
-4. [Architecture](#architecture)
-5. [Tech Stack](#tech-stack)
-6. [Microsoft Services Used](#microsoft-services-used)
-7. [AI Components](#ai-components)
-8. [Installation](#installation)
-9. [Deployment](#deployment)
-10. [Repository Structure](#repository-structure)
-11. [Documentation Index](#documentation-index)
-12. [Future Work](#future-work)
-13. [Team Roles](#team-roles)
+> An autonomous, always-on AI agent swarm that continuously red-teams your Azure cloud posture — discovering exposures, chaining real attack paths, validating exploitability, and opening the remediation pull request for you.
 
 ---
 
 ## Overview
 
-**BreachSim** is the world's first AI-native adversarial simulation platform. Autonomous agent
-swarms continuously red-team your cloud infrastructure, *reason* over novel attack paths, and
-close the vulnerability loop with auto-generated remediation code — turning offensive security
-from a quarterly ritual into a **continuous intelligence system**.
+**BreachSim** is an AI-native adversarial simulation platform that replaces point-in-time penetration tests with a continuous, autonomous red-team loop. A swarm of specialized GPT-4o agents maps your live cloud attack surface, reasons about how a real attacker would chain misconfigurations into a breach, validates each step safely in a sandbox, and then generates an infrastructure-as-code fix as a GitHub pull request. It is built for cloud security engineers, platform teams, and CISOs who need defensible, audit-ready posture assurance between their annual pentests. By turning every operator triage decision into a learning signal, BreachSim gets sharper the more your team uses it — closing the gap between "we think we're secure" and "we proved it this morning."
 
-Unlike static DAST scanners, BreachSim deploys a swarm of specialized agents that **discover →
-chain → exploit → validate → report → remediate** in real time, sharing a collective threat
-memory through Azure Cosmos DB.
+## Problem
 
-> **Demo wow-factor:** Spin up a misconfigured blob storage and watch 5+ agents discover, chain,
-> exploit, report, and remediate a threat vector in **under 90 seconds** — live on screen.
+- **Cadence gap** — Penetration tests happen once or twice a year, but cloud infrastructure changes hourly; attackers exploit the months of drift in between.
+- **Skill scarcity** — Senior offensive-security talent is expensive and rare, so most organizations simply cannot afford continuous manual red-teaming.
+- **Zero remediation loop** — Traditional scanners dump a PDF of findings and stop; nobody closes the loop from "vulnerability found" to "fix merged," so risk lingers.
 
----
+## Solution
 
-## The Problem
+A four-step autonomous loop runs end-to-end on every trigger:
 
-- **Security teams can't red-team fast enough.** New cloud configs ship hourly; manual pen-testing
-  happens quarterly at best.
-- **DAST tools are static scanners.** They don't reason, chain exploits, or adapt to novel
-  configurations.
-- **No tool autonomously discovers, chains, and remediates** threat vectors in real time.
-- CISOs pay **$200K+/yr** for red-team retainers against a **$15B+** cybersecurity testing market.
-
----
-
-## The Solution
-
-A **multi-agent swarm** with genuine agent-to-agent collaboration:
-
-| Agent | Role |
-|-------|------|
-| **Recon Agent** | Maps the attack surface (resources, configs, identities). |
-| **Planner Agent** | Reasons over a CVE/attack graph to compose exploit chains. |
-| **Execution Agent** | Crafts and runs sandboxed payloads in Azure Functions. |
-| **Validator Agent** | Confirms exploitability and assigns true risk severity. |
-| **Security Agent** | Enforces scope/guardrails; can veto unsafe actions. |
-| **Compliance Agent** | Generates NIST 800-53 / SOC 2 / ISO 27001 evidence. |
-| **Remediation Agent** | Emits Bicep/Terraform IaC fixes + opens a GitHub PR. |
-| **Memory Agent** | Persists and recalls the shared threat graph. |
-
-Agents communicate **asynchronously over Azure Event Grid** and share a **threat memory** in
-Cosmos DB. This mirrors how elite red teams actually operate — distinct roles, distinct tool
-access, and a chain-of-custody audit trail for every action.
-
-See [docs/multi-agent-design.md](docs/multi-agent-design.md) for full specs.
-
----
+1. **Discover** — The Recon agent queries Azure Resource Graph to map the live attack surface and flag publicly-exposed or misconfigured resources.
+2. **Chain** — The Planner agent uses GPT-4o, grounded in real CVE/ATT&CK evidence, to chain individual weaknesses into a plausible multi-step attack path.
+3. **Validate** — The Execution and Validator agents safely confirm exploitability with benign, read-only sandbox probes, rejecting any unproven claim.
+4. **Remediate** — The Risk, Compliance, and Remediation agents score the finding, map it to NIST/SOC 2/ISO controls, and open a GitHub PR with the infrastructure-as-code fix.
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    subgraph FE["🖥️ Frontend — Next.js 14"]
-        UI1[Dashboard]
-        UI2[Attack Graph · D3]
-        UI3[Agent Activity Feed · SSE]
-    end
-
-    subgraph API["⚙️ API — Azure Container Apps"]
-        ORCH[FastAPI Orchestrator]
-        FUNC[Azure Functions · sandbox]
-        AUTH[Entra ID · zero-trust]
-    end
-
-    subgraph SWARM["🤖 Azure AI Foundry — Agent Swarm"]
-        A1[Recon]
-        A2[Planner]
-        A3[Execution]
-        A4[Validator]
-        A5[Security]
-        A6[Compliance]
-        A7[Remediation]
-        A8[Memory]
-    end
-
-    subgraph AI["🧠 AI Layer"]
-        AOAI[Azure OpenAI · GPT-4o]
-        SEARCH[Azure AI Search · CVE vectors]
-        FOUNDRY[Foundry Agent SDK + tracing]
-    end
-
-    subgraph DATA["💾 Data"]
-        COSMOS[(Cosmos DB · threat graph + audit)]
-        BLOB[(Blob · artifacts/reports)]
-        KV[(Key Vault · secrets)]
-    end
-
-    subgraph INFRA["🏗️ Infra"]
-        MON[Azure Monitor]
-        GH[GitHub Actions · PR automation]
-    end
-
-    FE --> API
-    API --> SWARM
-    SWARM <-->|Event Grid bus| SWARM
-    SWARM --> AI
-    SWARM --> DATA
-    API --> AUTH
-    SWARM --> INFRA
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  Frontend  (Next.js 14 + TypeScript + Tailwind)                        │
+│  • Live agent console (SSE)   • Force-directed attack graph (D3)       │
+│  • API-key auth  +  "Sign in with Microsoft" (Entra ID / MSAL)         │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                 │  HTTPS / Server-Sent Events
+                                 ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  API Gateway  (FastAPI on Azure Container Apps)                        │
+│  • Multi-tenant RBAC   • Authorization-to-test guardrails   • /health  │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                 │  Orchestrator state machine
+                                 ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  AI Agent Swarm  (10 specialized GPT-4o agents)                        │
+│  Recon → Research → Planner → Security → Execution → Validator         │
+│         → Risk → (Compliance ∥ Remediation) → Memory                   │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                 │
+        ┌────────────────────────┼────────────────────────────┐
+        ▼                        ▼                             ▼
+┌────────────────┐   ┌────────────────────────┐   ┌────────────────────┐
+│ Azure OpenAI   │   │ Azure Cosmos DB        │   │ Azure Resource     │
+│ (GPT-4o)       │   │ (findings/graph/audit) │   │ Graph (live recon) │
+└────────────────┘   └────────────────────────┘   └────────────────────┘
+        │                        │                             │
+        ▼                        ▼                             ▼
+┌────────────────┐   ┌────────────────────────┐   ┌────────────────────┐
+│ Azure Entra ID │   │ Azure Service Bus      │   │ Azure Monitor /    │
+│ (enterprise    │   │ (durable run queue)    │   │ App Insights       │
+│  SSO)          │   │                        │   │ (telemetry)        │
+└────────────────┘   └────────────────────────┘   └────────────────────┘
+        │                                                       │
+        ▼                                                       ▼
+┌────────────────┐                                  ┌────────────────────┐
+│ GitHub Actions │                                  │ Azure Event Grid   │
+│ (CI/CD + PRs)  │                                  │ (agent event bus)  │
+└────────────────┘                                  └────────────────────┘
 ```
 
-Full detail: [docs/architecture.md](docs/architecture.md).
+## Microsoft AI Stack
 
----
+| Service | Usage | Required? |
+| --- | --- | --- |
+| **Azure OpenAI (GPT-4o)** | Core reasoning engine — attack-path chaining, validation narratives, remediation synthesis | Yes |
+| **Azure AI Foundry** | Project hosting, model deployment, and prompt/agent orchestration scaffolding | Yes |
+| **Azure Container Apps** | Serverless hosting for the FastAPI API and Next.js frontend (scale-to-zero) | Yes |
+| **Azure Cosmos DB** | Persistent store for findings, threat graph, audit log, runs, and tenants | Yes |
+| **Azure Resource Graph** | Live, read-only reconnaissance of the target subscription's attack surface | Optional* |
+| **Azure Entra ID** | Enterprise SSO ("Sign in with Microsoft") via MSAL OAuth2 | Optional |
+| **Azure Monitor / App Insights** | Distributed tracing, structured logs, and run telemetry | Optional |
+| **Azure Event Grid** | Decoupled agent-to-agent event bus for the swarm message fabric | Optional |
+| **GitHub Actions** | CI/CD, dependency (pip-audit) and SAST (bandit) security scans, deploy | Yes |
+| **GitHub Copilot** | AI pair-programmer used throughout development (see AI Tools Disclosure) | Dev-time |
+
+\* Optional services degrade gracefully: without them BreachSim runs fully offline in local/demo mode using an in-memory store and stubbed recon.
+
+## AI Agent Swarm
+
+| Agent | Responsibility |
+| --- | --- |
+| **Recon** | Maps the live cloud attack surface via Azure Resource Graph; flags public exposure and misconfiguration. |
+| **Research** | Grounds planning in real CVE / MITRE ATT&CK evidence (Azure AI Search + NVD), citing source IDs. |
+| **Planner** | Chains individual weaknesses into multi-step exploit paths using GPT-4o reasoning and a threat graph. |
+| **Security** | Enforces scope and sandbox guardrails; can veto any step that would exceed authorization. |
+| **Execution** | Safely runs benign, read-only payload tests in a sandbox to probe each step. |
+| **Validator** | Independently confirms exploitability, rejects unproven claims, and folds in operator feedback. |
+| **Risk** | Deterministically scores CVSS severity and business impact for auditability. |
+| **Compliance** | Generates NIST 800-53 / SOC 2 / ISO 27001 control-mapping evidence. |
+| **Remediation** | Synthesizes an infrastructure-as-code fix and opens a GitHub pull request. |
+| **Memory** | Persists discoveries to Cosmos DB threat history and recalls semantically similar prior findings. |
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Next.js 14 (App Router), TypeScript, Tailwind CSS, D3.js, Server-Sent Events |
-| **Backend** | Python 3.11, FastAPI, Pydantic v2, Uvicorn |
-| **Agents** | Azure AI Foundry Agent SDK, Semantic Kernel orchestration |
-| **AI** | Azure OpenAI (GPT-4o), Azure AI Search (vector CVE index) |
-| **Database** | Azure Cosmos DB (NoSQL, Gremlin-style threat graph) |
-| **Messaging** | Azure Event Grid (agent message bus) |
-| **Compute** | Azure Container Apps, Azure Functions |
-| **Auth** | Microsoft Entra ID (OAuth2 / OIDC, tenant consent) |
-| **Secrets** | Azure Key Vault |
-| **Observability** | Azure Monitor, Application Insights, Foundry tracing |
-| **IaC / CI/CD** | Bicep, Azure Developer CLI (`azd`), GitHub Actions |
+| Frontend | Backend |
+| --- | --- |
+| Next.js 14 (App Router) | Python 3.11+ with FastAPI |
+| TypeScript | Pydantic v2 settings & schemas |
+| Tailwind CSS | Azure OpenAI / Semantic Kernel |
+| D3.js (force-directed attack graph) | MSAL + PyJWT (Entra SSO / session JWTs) |
+| Zustand (state) + react-joyride (onboarding) | Azure SDKs (Cosmos, Resource Graph, Service Bus) |
+| Server-Sent Events (live agent feed) | Uvicorn ASGI server |
 
----
-
-## Microsoft Services Used
-
-- **Azure AI Foundry** — agent orchestration, SDK, and tracing
-- **Azure OpenAI** — GPT-4o reasoning for attack planning
-- **Azure AI Search** — vector index of CVE knowledge base
-- **Azure Cosmos DB** — threat graph + immutable audit log
-- **Azure Functions** — sandboxed payload execution
-- **Azure Container Apps** — auto-scaling agent hosting
-- **Azure Event Grid** — asynchronous agent message bus
-- **Azure Monitor / App Insights** — observability + alerting
-- **Microsoft Entra ID** — zero-trust authn/authz + tenant consent
-- **Azure Key Vault** — secret + credential storage
-
----
-
-## AI Components
-
-1. **Reasoning-native attack planning** — GPT-4o dynamically composes attack chains from novel
-   environmental context (no pre-built attack trees).
-2. **RAG over CVE corpus** — Azure AI Search vector index grounds the Planner Agent in real CVEs.
-3. **Multi-agent specialization** — distinct roles, tool access, and async communication.
-4. **Shared threat memory** — Cosmos DB persists discovered paths so agents learn across runs.
-5. **Compliance-native output** — every action is mapped to NIST/SOC2/ISO controls.
-
----
-
-## Installation
-
-### Prerequisites
-
-- Python **3.11+**, Node.js **20+**, Docker, Azure CLI, Azure Developer CLI (`azd`)
-- An Azure subscription with access to Azure OpenAI
-
-### Local setup
+## Installation (Local)
 
 ```bash
-git clone https://github.com/<org>/breachsim.git
-cd breachsim
+# 1. Clone the repository
+git clone https://github.com/ArunCharlie1612/Microsoft.git
+cd Microsoft/breachsim
 
-# Backend
+# 2. Backend — create a virtual environment and install dependencies
 cd backend
-python -m venv .venv && source .venv/bin/activate
+python3.11 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp ../.env.example .env          # fill in values
-uvicorn app.main:app --reload --port 8000
 
-# Frontend (new terminal)
+# 3. Configure environment variables
+cp ../.env.example .env          # then fill in values (all optional for local demo)
+
+# 4. Run the API (in-memory store, no cloud dependencies needed)
+APP_ENV=local uvicorn app.main:app --reload --port 8000
+
+# 5. Frontend — in a second terminal
 cd ../frontend
 npm install
-cp .env.local.example .env.local
-npm run dev                      # http://localhost:3000
+npm run dev                      # serves http://localhost:3000
 ```
 
-See [docs/deployment-guide.md](docs/deployment-guide.md) for the full guide.
+Open `http://localhost:3000`, create a free workspace, and click **Deploy Swarm**. The
+backend health endpoint is available at `http://localhost:8000/health`.
 
----
-
-## Deployment
-
-One command provisions every Azure resource and deploys both apps:
+## Deployment (Azure)
 
 ```bash
-azd auth login
+# 1. Authenticate
+az login
+az account set --subscription <your-subscription-id>
+
+# 2. Provision + deploy all infrastructure (Bicep)
+cd infra
+az deployment sub create \
+  --location centralus \
+  --template-file main.bicep \
+  --parameters environmentSuffix=prod
+
+# (or, with the Azure Developer CLI)
 azd up
+
+# 3. Verify the deployment is healthy and connected to Cosmos
+curl https://<your-api-fqdn>.azurecontainerapps.io/health
+# → {"status":"ok","store":"cosmos","environment":"production",...}
 ```
 
-This runs the Bicep templates in [infra/](infra/) and the GitHub Actions pipeline in
-[.github/workflows/deploy.yml](.github/workflows/deploy.yml).
+In `production` the API requires a Cosmos connection (`store: "cosmos"`); the in-memory
+fallback is only permitted when `ENVIRONMENT=local`.
 
----
+## Live Demo
 
-## Repository Structure
+- **URL:** `[PLACEHOLDER — https://breachsim.example.azurecontainerapps.io]`
+- **Test API key:** `bsk_demo_xxxx` (free tier, 5 runs/day)
+- **Test Microsoft login:** `demo@breachsim.io` / `[PLACEHOLDER]`
 
-```
-breachsim/
-├── backend/        # FastAPI orchestrator + agent swarm (Python)
-├── frontend/       # Next.js 14 dashboard (TypeScript + Tailwind)
-├── infra/          # Bicep IaC + azd config
-├── docs/           # Architecture, design, deck, demo script
-├── scripts/        # Demo seeding + helper scripts
-└── .github/        # CI/CD workflows
-```
+## AI Tools Disclosure
 
----
+**GitHub Copilot** was used during development for:
+- Scaffolding FastAPI routes, Pydantic schemas, and the agent base classes.
+- Generating React/TypeScript components (attack graph, findings panel, onboarding tour).
+- Authoring unit and end-to-end tests, and writing Bicep infrastructure modules.
+- Drafting docstrings, inline comments, and this documentation.
 
-## Documentation Index
+**Azure OpenAI GPT-4o** is used at runtime for:
+- Chaining discovered weaknesses into coherent multi-step attack paths (Planner agent).
+- Producing reproduction narratives and validation reasoning (Validator agent).
+- Synthesizing infrastructure-as-code remediation diffs (Remediation agent).
 
-| Document | Purpose |
-|----------|---------|
-| [docs/architecture.md](docs/architecture.md) | Enterprise architecture (all layers) |
-| [docs/uniqueness-moat-report.md](docs/uniqueness-moat-report.md) | Competitive analysis + 5 moats |
-| [docs/product-creation.md](docs/product-creation.md) | Vision, pitch, personas, features, roadmap |
-| [docs/multi-agent-design.md](docs/multi-agent-design.md) | Agent specs + comms protocol |
-| [docs/database-design.md](docs/database-design.md) | ER diagram, tables, indexes, data flow |
-| [docs/api-design.md](docs/api-design.md) | Full REST API specification |
-| [docs/build-plan.md](docs/build-plan.md) | 4-phase build plan with estimates |
-| [docs/ui-ux.md](docs/ui-ux.md) | Pages, flows, wireframes, color system |
-| [docs/demo-script.md](docs/demo-script.md) | 3-minute scene-by-scene demo script |
-| [docs/pitch-deck.md](docs/pitch-deck.md) | 10-slide deck with speaker notes |
+**Azure AI Foundry** is used for:
+- Hosting the GPT-4o model deployment and project configuration.
+- Providing the agent orchestration and prompt-management scaffolding for the swarm.
 
----
+## Data & Privacy
+
+- **What data is used:** Read-only metadata about the target Azure subscription's resources (types, names, configuration flags) gathered via Azure Resource Graph, plus public CVE/ATT&CK reference data. BreachSim never reads, copies, or exfiltrates customer data — validation probes are benign and read-only.
+- **How it is stored:** Findings, the threat graph, the audit log, and tenant records are persisted in Azure Cosmos DB, scoped per tenant. In local/demo mode an ephemeral in-memory store is used and nothing is persisted.
+- **How it is protected:** All access is authenticated (per-tenant API keys hashed with SHA-256, or short-lived Entra ID session JWTs) and authorized via RBAC. Managed Identity is used for service-to-service auth in Azure; secrets live in environment variables / Key Vault, never in code. Every run requires an explicit authorization-to-test attestation, and a hard sandbox guardrail rejects out-of-scope or non-sandbox targets.
+
+## Team
+
+| Name | Role | Responsibilities |
+| --- | --- | --- |
+| Alex Carter | Lead Engineer / Backend | Agent swarm orchestration, FastAPI API, Azure integration |
+| Priya Nair | Frontend Engineer | Next.js console, D3 attack graph, auth & onboarding UX |
+| Jordan Lee | Cloud / Security Architect | Bicep infrastructure, CI/CD security scans, threat modeling |
 
 ## Future Work
 
-- **Multi-cloud**: AWS + GCP swarm support
-- **24/7 continuous mode** with scheduled swarms
-- **Custom attack scenario builder**
-- **Red team vs. blue team** simulation mode
-- **Microsoft Sentinel** SOC analyst co-pilot integration
+- **Autonomous remediation merge** — gate and auto-merge low-risk IaC fixes behind policy, closing the loop without human intervention.
+- **Multi-cloud recon** — extend the Recon agent beyond Azure Resource Graph to AWS and GCP attack-surface mapping.
+- **Continuous scheduling & drift alerts** — run the swarm on a cron/event trigger and alert on newly-introduced exposures in near-real-time.
 
----
+## License
 
-## Team Roles
-
-| Role | Responsibility |
-|------|----------------|
-| **Product / PM** | Vision, personas, demo narrative, pitch |
-| **Agent / AI Engineer** | Foundry agents, prompts, orchestration, RAG |
-| **Backend Engineer** | FastAPI, Cosmos DB, Event Grid, Functions |
-| **Frontend Engineer** | Next.js dashboard, attack graph, SSE feed |
-| **Cloud / DevOps Engineer** | Bicep IaC, Entra ID, CI/CD, observability |
-
----
-
-<div align="center">
-
-Built for the **"Security in the Agentic Future"** theme.
-
-</div>
+MIT

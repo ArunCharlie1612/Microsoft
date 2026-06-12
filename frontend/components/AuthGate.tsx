@@ -1,7 +1,14 @@
 "use client";
 
 import { signup } from "@/lib/api";
-import { clearAuth, getTenant, isAuthenticated, setApiKey } from "@/lib/auth";
+import {
+  captureSsoToken,
+  clearAuth,
+  getTenant,
+  isAuthenticated,
+  loginWithMicrosoft,
+  setApiKey,
+} from "@/lib/auth";
 import { Check, Copy, KeyRound, LogOut, ShieldCheck, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -27,6 +34,9 @@ export function AuthGate({
   const [tenant, setTenant] = useState<{ name: string } | null>(null);
 
   useEffect(() => {
+    // Capture an enterprise SSO token returned in the URL fragment after the
+    // Microsoft callback; otherwise fall back to any stored API key.
+    captureSsoToken();
     setAuthed(isAuthenticated());
     setTenant(getTenant());
   }, []);
@@ -212,6 +222,26 @@ export function AuthGate({
           </button>
         </form>
       )}
+
+      <div className="flex items-center gap-3 text-xs text-muted">
+        <span className="h-px flex-1 bg-white/10" />
+        <span>or</span>
+        <span className="h-px flex-1 bg-white/10" />
+      </div>
+
+      <button
+        onClick={loginWithMicrosoft}
+        className="flex w-full items-center justify-center gap-2.5 rounded-lg px-4 py-2.5 font-medium text-white transition hover:opacity-90"
+        style={{ backgroundColor: "#0078D4" }}
+      >
+        <svg width="18" height="18" viewBox="0 0 23 23" aria-hidden="true">
+          <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+          <rect x="12" y="1" width="10" height="10" fill="#7FBA00" />
+          <rect x="1" y="12" width="10" height="10" fill="#00A4EF" />
+          <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
+        </svg>
+        Sign in with Microsoft
+      </button>
 
       {error && <p className="text-sm text-breach">{error}</p>}
     </div>

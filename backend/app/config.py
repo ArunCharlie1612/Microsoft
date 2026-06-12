@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     # App
     app_env: str = "local"
+    # Deployment environment. "local" permits the in-memory store fallback; in
+    # "development"/"production" a Cosmos connection is mandatory (see cosmos.py).
+    environment: str = "local"
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
@@ -38,6 +41,8 @@ class Settings(BaseSettings):
     # Cosmos
     cosmos_endpoint: str = ""
     cosmos_key: str = ""
+    # Full account connection string (alternative to endpoint + managed identity).
+    cosmos_connection_string: str = ""
     cosmos_database: str = "breachsim"
     cosmos_container_findings: str = "findings"
     cosmos_container_agents: str = "agent_events"
@@ -62,7 +67,13 @@ class Settings(BaseSettings):
     azure_tenant_id: str = ""
     azure_client_id: str = ""
     azure_client_secret: str = ""
+    # OAuth2 redirect URI registered on the Entra app registration (enterprise SSO).
+    azure_redirect_uri: str = ""
     entra_api_audience: str = "api://breachsim"
+    # HS256 signing secret for BreachSim-issued session JWTs (enterprise SSO login).
+    # A stable dev default keeps local tokens valid across restarts; override in prod.
+    session_jwt_secret: str = "dev-insecure-session-secret-change-me"
+    session_jwt_ttl_minutes: int = 60
 
     # GitHub
     github_app_id: str = ""
@@ -138,6 +149,28 @@ class Settings(BaseSettings):
     @property
     def is_local(self) -> bool:
         return self.app_env == "local"
+
+    @property
+    def is_local_environment(self) -> bool:
+        """Whether the in-memory store fallback is permitted."""
+        return self.environment.lower() == "local"
+
+    @property
+    def cosmos_configured(self) -> bool:
+        """Whether a Cosmos backend is available (connection string or endpoint)."""
+        return bool(self.cosmos_connection_string or self.cosmos_endpoint)
+
+    @property
+    def enterprise_auth_configured(self) -> bool:
+        """Whether all four Entra ID OAuth2 settings are present for SSO login."""
+        return all(
+            [
+                self.azure_tenant_id,
+                self.azure_client_id,
+                self.azure_client_secret,
+                self.azure_redirect_uri,
+            ]
+        )
 
     @property
     def auth_enabled(self) -> bool:

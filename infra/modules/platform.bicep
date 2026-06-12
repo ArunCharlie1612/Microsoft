@@ -224,6 +224,9 @@ var apiEnv = concat([
   // APP_ENV=local bypasses Entra auth so the public demo UI works without an
   // app registration. Switch to 'prod' once Entra ID is wired (see go-live doc).
   { name: 'APP_ENV', value: 'local' }
+  // ENVIRONMENT=production enforces that a Cosmos backend is configured — the
+  // in-memory store fallback is rejected at startup outside local dev.
+  { name: 'ENVIRONMENT', value: 'production' }
   { name: 'BREACHSIM_DEMO_PACING_MS', value: '600' }
   { name: 'CORS_ORIGINS', value: webUrl }
   // Cosmos persistence via managed identity (no key) — runs/findings/graph survive restarts.

@@ -6,6 +6,7 @@ import { AttackGraph } from "@/components/AttackGraph";
 import { AuthGate } from "@/components/AuthGate";
 import { FindingsPanel } from "@/components/FindingsPanel";
 import { OnboardingTour } from "@/components/OnboardingTour";
+import RunSummaryBanner, { type RunSummary } from "@/components/RunSummaryBanner";
 import { UsagePanel } from "@/components/UsagePanel";
 import {
   AgentEvent,
@@ -14,6 +15,7 @@ import {
   createRun,
   getFindings,
   getGraph,
+  getRun,
   seedDemo,
   streamEvents,
 } from "@/lib/api";
@@ -35,10 +37,14 @@ export default function DashboardPage() {
   const [progress, setProgress] = useState(0);
   const [running, setRunning] = useState(false);
   const [usageKey, setUsageKey] = useState(0);
+  const [summary, setSummary] = useState<RunSummary | null>(null);
 
   // Track the in-flight run so we can terminate it (e.g. on sign-out).
   const activeRunId = useRef<string | null>(null);
   const unsubscribe = useRef<(() => void) | null>(null);
+  // Timing used to derive the run-summary banner.
+  const runStartRef = useRef<number>(0);
+  const firstFindingRef = useRef<number | null>(null);
 
   async function launch() {
     setEvents([]);
@@ -47,6 +53,9 @@ export default function DashboardPage() {
     setCompleted(new Set());
     setProgress(0);
     setRunning(true);
+    setSummary(null);
+    runStartRef.current = Date.now();
+    firstFindingRef.current = null;
 
     await seedDemo();
     const run = await createRun("Live Demo — misconfigured blob", DEMO_SCOPE);
@@ -61,6 +70,10 @@ export default function DashboardPage() {
           setActive(e.agentId);
           setCompleted((prev) => new Set(prev).add(e.agentId));
         }
+        // The Risk Agent scores the first validated finding — mark when it arrives.
+        if (e.agentId === "risk" && firstFindingRef.current === null) {
+          firstFindingRef.current = Date.now();
+        }
         getGraph(run.runId).then(setGraph);
       },
       async () => {
@@ -69,8 +82,10 @@ export default function DashboardPage() {
         setProgress(1);
         activeRunId.current = null;
         unsubscribe.current = null;
-        setFindings(await getFindings(run.runId));
+        const runFindings = await getFindings(run.runId);
+        setFindings(runFindings);
         setGraph(await getGraph(run.runId));
+        setSummary(await buildSummary(run.runId, runFindings));
         setUsageKey((k) => k + 1);
       }
     );
@@ -91,6 +106,38 @@ export default function DashboardPage() {
     setFindings([]);
     setGraph({ nodes: [], edges: [] });
     setCompleted(new Set());
+    setSummary(null);
+  }
+
+  // Derive the run-summary banner from the run result object + findings.
+  async function buildSummary(runId: string, runFindings: any[]): Promise<RunSummary> {
+    let totalRunTimeSec = (Date.now() - runStartRef.current) / 1000;
+    try {
+      const detail = await getRun(runId);
+      if (detail.startedAt && detail.completedAt) {
+        totalRunTimeSec =
+          (new Date(detail.completedAt).getTime() - new Date(detail.startedAt).getTime()) / 1000;
+      }
+    } catch {
+      // Fall back to the client-side elapsed time.
+    }
+
+    const timeToFirstFindingSec =
+      firstFindingRef.current == null
+        ? null
+        : (firstFindingRef.current - runStartRef.current) / 1000;
+    const criticalExposures = runFindings.filter(
+      (f) => String(f?.severity).toLowerCase() === "critical"
+    ).length;
+    const prFinding = runFindings.find((f) => f?.remediation?.pr_url);
+
+    return {
+      timeToFirstFindingSec,
+      attackChains: runFindings.length,
+      criticalExposures,
+      prUrl: prFinding?.remediation?.pr_url ?? null,
+      totalRunTimeSec,
+    };
   }
 
   return (
@@ -114,6 +161,8 @@ export default function DashboardPage() {
             {running ? "Swarm running…" : "Deploy Swarm"}
           </button>
         </section>
+
+        {summary && <RunSummaryBanner summary={summary} />}
 
         <div className="h-1.5 w-full bg-panel rounded-full overflow-hidden">
           <div

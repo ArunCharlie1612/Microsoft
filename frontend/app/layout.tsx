@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { TourButton } from "@/components/TourButton";
 import "./globals.css";
 
@@ -22,6 +23,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
             <div className="flex items-center gap-4">
               <span className="text-xs text-muted">Security in the Agentic Future</span>
+              <Link
+                href="/safety"
+                className="text-xs text-muted hover:text-signal border border-white/10 hover:border-signal rounded-lg px-3 py-1.5 transition"
+              >
+                Safety
+              </Link>
               <TourButton />
             </div>
           </header>
